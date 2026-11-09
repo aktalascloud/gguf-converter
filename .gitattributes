@@ -1,0 +1,3 @@
+* text=auto eol=lf
+vendor/** -text -whitespace
+licenses/** -text -whitespace

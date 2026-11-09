@@ -1,0 +1,7 @@
+/build-assets/
+/dist/
+__pycache__/
+*.pyc
+*.exe
+*.gguf
+*.safetensors
