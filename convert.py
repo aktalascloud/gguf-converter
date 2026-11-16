@@ -447,10 +447,10 @@ class Conversion:
             sys.path.insert(0, str(HERE))
             try:
                 from vulkan_workflow import optimize
+                return optimize(self, manifest, local_gguf(plan.get('base')), target, output, gguf_module, bits,
+                                capture=plan.get('capture'), detect=route, model_loss=plan.get('model_loss', False))
             finally:
                 sys.path.pop(0)
-            return optimize(self, manifest, local_gguf(plan.get('base')), target, output, gguf_module, bits,
-                            capture=plan.get('capture'), detect=route, model_loss=plan.get('model_loss', False))
 
         assignments = target['tensors']
         variants = plan.get('variants')
