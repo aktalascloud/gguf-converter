@@ -1,0 +1,519 @@
+{
+  "date": "2026-11-16",
+  "gpu": "AMD Radeon RX 580 2048SP 8 GiB",
+  "cpu": "Intel Xeon E5-2696 v3, AVX2",
+  "converter_release": {
+    "bytes": 232258048,
+    "sha256": "35998af916b03a95dd40ff4891c88b846a079b1e02f58d6248c193a784b7fa87",
+    "fixed_layout_calibration": true,
+    "fixture_output_sha256": "d82c805000f37eb7e8bc41a6879f00cec49d3461553491027e8492fe296d65a8"
+  },
+  "runtime_trials": [
+    {
+      "kind": "music",
+      "label": "avx2-cpu",
+      "runs": [
+        {
+          "seconds": 55.96009149996098,
+          "samples": 264600,
+          "pcm_sha": "5d94d87f733c2606ed93e6525d02afe8b04f01d8b9da7ff5486ecf84d234d111"
+        },
+        {
+          "seconds": 54.926991200016346,
+          "samples": 264600,
+          "pcm_sha": "5d94d87f733c2606ed93e6525d02afe8b04f01d8b9da7ff5486ecf84d234d111"
+        }
+      ],
+      "settings": {
+        "usevulkan": null,
+        "usecpu": true,
+        "gpulayers": 0
+      },
+      "env_overrides": {},
+      "native_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "asset_fields": {
+        "musicllm": "52be345b5155bf9ef0b2411e7df8d1d2b8e13b6d977a2f70c35612ec69b1f591",
+        "musicvae": "d4f4a05d8f291ae820cd1e43609da3fa91b56465810091a2b08c3350b751719d"
+      },
+      "oom": false,
+      "ok": true
+    },
+    {
+      "kind": "music",
+      "label": "cpu-10",
+      "runs": [],
+      "settings": {
+        "sdthreads": 10
+      },
+      "env_overrides": {},
+      "native_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "ok": false,
+      "reason": "Candidate skipped by compiler isolation guard."
+    },
+    {
+      "kind": "music",
+      "label": "cpu-6",
+      "runs": [
+        {
+          "seconds": 10.563911199977156,
+          "samples": 264600,
+          "pcm_sha": "96a75064cc583d41583f59f367c58abc7741b6a80c30d9fe4bd5dd9a224338d3"
+        },
+        {
+          "seconds": 9.357251400011592,
+          "samples": 264600,
+          "pcm_sha": "96a75064cc583d41583f59f367c58abc7741b6a80c30d9fe4bd5dd9a224338d3"
+        }
+      ],
+      "settings": {
+        "sdthreads": 6
+      },
+      "env_overrides": {},
+      "native_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "asset_fields": {
+        "musicllm": "52be345b5155bf9ef0b2411e7df8d1d2b8e13b6d977a2f70c35612ec69b1f591",
+        "musicvae": "d4f4a05d8f291ae820cd1e43609da3fa91b56465810091a2b08c3350b751719d"
+      },
+      "oom": false,
+      "ok": true
+    },
+    {
+      "kind": "music",
+      "label": "current",
+      "runs": [
+        {
+          "seconds": 10.636263500025962,
+          "samples": 264600,
+          "pcm_sha": "96a75064cc583d41583f59f367c58abc7741b6a80c30d9fe4bd5dd9a224338d3"
+        },
+        {
+          "seconds": 9.42571029998362,
+          "samples": 264600,
+          "pcm_sha": "96a75064cc583d41583f59f367c58abc7741b6a80c30d9fe4bd5dd9a224338d3"
+        }
+      ],
+      "settings": {},
+      "env_overrides": {},
+      "native_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "asset_fields": {
+        "musicllm": "52be345b5155bf9ef0b2411e7df8d1d2b8e13b6d977a2f70c35612ec69b1f591",
+        "musicvae": "d4f4a05d8f291ae820cd1e43609da3fa91b56465810091a2b08c3350b751719d"
+      },
+      "oom": false,
+      "ok": true
+    },
+    {
+      "kind": "photo",
+      "label": "cpu-10",
+      "runs": [
+        {
+          "seconds": 132.35899999999674,
+          "native_seconds": 122.574,
+          "size": [
+            736,
+            1104
+          ],
+          "raw_sha256": "aacfe6b47122f3eb4302f6ba59f21679739c82156a64c09b73a0ec974a60d746",
+          "final_sha256": "057a36b84272a2c0d47a3f91c085dcb4df4fedb8722ba4556127562067b3f10d"
+        }
+      ],
+      "settings": {
+        "sdthreads": 10
+      },
+      "env_overrides": {},
+      "native_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "asset_fields": {
+        "sdmodel": "92e2a40e6752c83da3526ec6f2da1653bed433cabde48627792a568eac0f008f",
+        "sdclip1": "f3083eab75745e7d3e0cfc8184747d5e53ae4a23811096345d0e2b361c571bde",
+        "sdvae": "c3bdf94dc67ec69b30ea9fe1fa8340085679cae64d019f7c7e4a9921f1a7f17a",
+        "sdlora": [
+          "57d2a400af32a0afd9cd065c43ebeb6a0e44b153abaef0171ce6891b6b057d13",
+          "4a187913365a862503a4297d26248d95b440636b68e60239e68ffc952b737e70"
+        ]
+      },
+      "oom": false,
+      "ok": true
+    },
+    {
+      "kind": "photo",
+      "label": "current",
+      "runs": [
+        {
+          "seconds": 133.93800000002375,
+          "native_seconds": 121.761,
+          "size": [
+            736,
+            1104
+          ],
+          "raw_sha256": "aacfe6b47122f3eb4302f6ba59f21679739c82156a64c09b73a0ec974a60d746",
+          "final_sha256": "057a36b84272a2c0d47a3f91c085dcb4df4fedb8722ba4556127562067b3f10d"
+        }
+      ],
+      "settings": {},
+      "env_overrides": {},
+      "native_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "asset_fields": {
+        "sdmodel": "92e2a40e6752c83da3526ec6f2da1653bed433cabde48627792a568eac0f008f",
+        "sdclip1": "f3083eab75745e7d3e0cfc8184747d5e53ae4a23811096345d0e2b361c571bde",
+        "sdvae": "c3bdf94dc67ec69b30ea9fe1fa8340085679cae64d019f7c7e4a9921f1a7f17a",
+        "sdlora": [
+          "57d2a400af32a0afd9cd065c43ebeb6a0e44b153abaef0171ce6891b6b057d13",
+          "4a187913365a862503a4297d26248d95b440636b68e60239e68ffc952b737e70"
+        ]
+      },
+      "oom": false,
+      "ok": true
+    },
+    {
+      "kind": "photo",
+      "label": "tile-m32",
+      "runs": [
+        {
+          "seconds": 133.39000000001397,
+          "native_seconds": 122.891,
+          "size": [
+            736,
+            1104
+          ],
+          "raw_sha256": "aacfe6b47122f3eb4302f6ba59f21679739c82156a64c09b73a0ec974a60d746",
+          "final_sha256": "057a36b84272a2c0d47a3f91c085dcb4df4fedb8722ba4556127562067b3f10d"
+        }
+      ],
+      "settings": {},
+      "env_overrides": {
+        "GGML_VK_GCN_TILE_VARIANT": "m32"
+      },
+      "native_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "asset_fields": {
+        "sdmodel": "92e2a40e6752c83da3526ec6f2da1653bed433cabde48627792a568eac0f008f",
+        "sdclip1": "f3083eab75745e7d3e0cfc8184747d5e53ae4a23811096345d0e2b361c571bde",
+        "sdvae": "c3bdf94dc67ec69b30ea9fe1fa8340085679cae64d019f7c7e4a9921f1a7f17a",
+        "sdlora": [
+          "57d2a400af32a0afd9cd065c43ebeb6a0e44b153abaef0171ce6891b6b057d13",
+          "4a187913365a862503a4297d26248d95b440636b68e60239e68ffc952b737e70"
+        ]
+      },
+      "oom": false,
+      "ok": true
+    },
+    {
+      "kind": "sfx",
+      "label": "cpu-10",
+      "runs": [
+        {
+          "seconds": 7.6221818999620155,
+          "duration": 1.5,
+          "sha256": "bd978fd6503b41e9e4f88899a2c349351c3894144e80b2e9c85c634d31cb8471"
+        },
+        {
+          "seconds": 7.823411900026258,
+          "duration": 1.5,
+          "sha256": "bd978fd6503b41e9e4f88899a2c349351c3894144e80b2e9c85c634d31cb8471"
+        }
+      ],
+      "settings": {
+        "sfx_threads": 10
+      },
+      "env_overrides": {},
+      "native_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "ok": true
+    },
+    {
+      "kind": "sfx",
+      "label": "cpu-6",
+      "runs": [
+        {
+          "seconds": 10.227775899984408,
+          "duration": 1.5,
+          "sha256": "bd978fd6503b41e9e4f88899a2c349351c3894144e80b2e9c85c634d31cb8471"
+        },
+        {
+          "seconds": 10.228937399981078,
+          "duration": 1.5,
+          "sha256": "bd978fd6503b41e9e4f88899a2c349351c3894144e80b2e9c85c634d31cb8471"
+        }
+      ],
+      "settings": {
+        "sfx_threads": 6
+      },
+      "env_overrides": {},
+      "native_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "ok": true
+    },
+    {
+      "kind": "sfx",
+      "label": "current",
+      "runs": [
+        {
+          "seconds": 9.946870999992825,
+          "duration": 1.5,
+          "sha256": "bd978fd6503b41e9e4f88899a2c349351c3894144e80b2e9c85c634d31cb8471"
+        },
+        {
+          "seconds": 7.448577900009695,
+          "duration": 1.5,
+          "sha256": "bd978fd6503b41e9e4f88899a2c349351c3894144e80b2e9c85c634d31cb8471"
+        }
+      ],
+      "settings": {
+        "sfx_threads": 20
+      },
+      "env_overrides": {},
+      "native_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "ok": true
+    },
+    {
+      "kind": "video",
+      "label": "calibrated-q4",
+      "runs": [
+        {
+          "seconds": 95.59399999998277,
+          "encode_seconds": 0.3333864999585785,
+          "avi": {
+            "microseconds_per_frame": 41666,
+            "frames": 5,
+            "width": 832,
+            "height": 480,
+            "codec": "MJPG",
+            "scale": 1,
+            "rate": 24,
+            "fps": 24.0
+          },
+          "avi_sha256": "1b8d0fa79f67f2ab127d28a2636d5ce2199908c0dfa8d3459e47535dd83777cf"
+        }
+      ],
+      "settings": {
+        "sdmodel": "calibrated Q4_0"
+      },
+      "env_overrides": {},
+      "native_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "asset_fields": {
+        "sdmodel": "a61b0d3573d968ede2d667c67607b67489baa3c295d30daeb0109d2d05c48ce6",
+        "sdclip1": "17cf97a5bbbc60a646d6105b832b6f657ce904a8a1ad970e4b59df0c67584a40",
+        "sdvae": "e40321bd36b9709991dae2530eb4ac303dd168276980d3e9bc4b6e2b75fed156",
+        "sdlora": [
+          "d646701e1f9ec369d78146cbfd5fe71b4abaf145e33f6ab93ff698f6755354ee"
+        ]
+      },
+      "oom": false,
+      "ok": true
+    },
+    {
+      "kind": "video",
+      "label": "cpu-10",
+      "runs": [
+        {
+          "seconds": 99.07900000002701,
+          "encode_seconds": 0.5033946000039577,
+          "avi": {
+            "microseconds_per_frame": 41666,
+            "frames": 5,
+            "width": 832,
+            "height": 480,
+            "codec": "MJPG",
+            "scale": 1,
+            "rate": 24,
+            "fps": 24.0
+          },
+          "avi_sha256": "d99705e080cd1a834ed894e132b50ecff05a3095a6ea948ced93da3c5581ab16"
+        }
+      ],
+      "settings": {
+        "sdthreads": 10
+      },
+      "env_overrides": {},
+      "native_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "asset_fields": {
+        "sdmodel": "8aa3a98c254bd02a9cc7e4f1db37720fe291cef8b0c32fb78e7a2391125d6b28",
+        "sdclip1": "17cf97a5bbbc60a646d6105b832b6f657ce904a8a1ad970e4b59df0c67584a40",
+        "sdvae": "e40321bd36b9709991dae2530eb4ac303dd168276980d3e9bc4b6e2b75fed156",
+        "sdlora": [
+          "d646701e1f9ec369d78146cbfd5fe71b4abaf145e33f6ab93ff698f6755354ee"
+        ]
+      },
+      "oom": false,
+      "ok": true
+    },
+    {
+      "kind": "video",
+      "label": "current",
+      "runs": [
+        {
+          "seconds": 95.89100000000326,
+          "encode_seconds": 0.8421135999960825,
+          "avi": {
+            "microseconds_per_frame": 41666,
+            "frames": 5,
+            "width": 832,
+            "height": 480,
+            "codec": "MJPG",
+            "scale": 1,
+            "rate": 24,
+            "fps": 24.0
+          },
+          "avi_sha256": "d99705e080cd1a834ed894e132b50ecff05a3095a6ea948ced93da3c5581ab16"
+        }
+      ],
+      "settings": {},
+      "env_overrides": {},
+      "native_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "asset_fields": {
+        "sdmodel": "8aa3a98c254bd02a9cc7e4f1db37720fe291cef8b0c32fb78e7a2391125d6b28",
+        "sdclip1": "17cf97a5bbbc60a646d6105b832b6f657ce904a8a1ad970e4b59df0c67584a40",
+        "sdvae": "e40321bd36b9709991dae2530eb4ac303dd168276980d3e9bc4b6e2b75fed156",
+        "sdlora": [
+          "d646701e1f9ec369d78146cbfd5fe71b4abaf145e33f6ab93ff698f6755354ee"
+        ]
+      },
+      "oom": false,
+      "ok": true
+    },
+    {
+      "kind": "video",
+      "label": "tile-n32",
+      "runs": [
+        {
+          "seconds": 96.04699999996228,
+          "encode_seconds": 0.9154917999985628,
+          "avi": {
+            "microseconds_per_frame": 41666,
+            "frames": 5,
+            "width": 832,
+            "height": 480,
+            "codec": "MJPG",
+            "scale": 1,
+            "rate": 24,
+            "fps": 24.0
+          },
+          "avi_sha256": "3f27b9fe0c5ce269d5283b3a9bc3b4ea2e351b5be2a4c87741f0b98cb1858b00"
+        }
+      ],
+      "settings": {},
+      "env_overrides": {
+        "GGML_VK_GCN_TILE_VARIANT": "n32"
+      },
+      "native_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "asset_fields": {
+        "sdmodel": "8aa3a98c254bd02a9cc7e4f1db37720fe291cef8b0c32fb78e7a2391125d6b28",
+        "sdclip1": "17cf97a5bbbc60a646d6105b832b6f657ce904a8a1ad970e4b59df0c67584a40",
+        "sdvae": "e40321bd36b9709991dae2530eb4ac303dd168276980d3e9bc4b6e2b75fed156",
+        "sdlora": [
+          "d646701e1f9ec369d78146cbfd5fe71b4abaf145e33f6ab93ff698f6755354ee"
+        ]
+      },
+      "oom": false,
+      "ok": true
+    }
+  ],
+  "sfx_interleaved": [
+    {
+      "threads": 20,
+      "seconds": 10.047984199947678,
+      "sha256": "bd978fd6503b41e9e4f88899a2c349351c3894144e80b2e9c85c634d31cb8471"
+    },
+    {
+      "threads": 10,
+      "seconds": 7.857057099987287,
+      "sha256": "bd978fd6503b41e9e4f88899a2c349351c3894144e80b2e9c85c634d31cb8471"
+    },
+    {
+      "threads": 10,
+      "seconds": 8.024211100011598,
+      "sha256": "bd978fd6503b41e9e4f88899a2c349351c3894144e80b2e9c85c634d31cb8471"
+    },
+    {
+      "threads": 20,
+      "seconds": 7.678343000006862,
+      "sha256": "bd978fd6503b41e9e4f88899a2c349351c3894144e80b2e9c85c634d31cb8471"
+    }
+  ],
+  "rife": {
+    "seconds": {
+      "1:1:1": [
+        1.4129178000148386,
+        1.2123333999770693,
+        1.2136928999680094
+      ],
+      "2:1:2": [
+        1.0095922999898903,
+        1.2108767000027,
+        1.2112373000127263
+      ]
+    },
+    "median": {
+      "1:1:1": 1.2136928999680094,
+      "2:1:2": 1.2108767000027
+    },
+    "png_frames_identical": true,
+    "weights": {
+      "flownet.bin": "f334ed2260149ce0188a6dcf049844e8b0cdd912e01cbcfb63553157d2508958",
+      "flownet.param": "28df14d57a225725ee5386f52eba422488450d37c9f40800ed4f62e8ba846692"
+    },
+    "input_avi": "d99705e080cd1a834ed894e132b50ecff05a3095a6ea948ced93da3c5581ab16",
+    "exe_sha256": "4b970319db2814c82b15fceed8193151560a676a9eb63f20d4877be77b98f44f"
+  },
+  "wan_fp16_reference": {
+    "source": "https://huggingface.co/Kijai/WanVideo_comfy/resolve/0965236/Wan22-Turbo/Wan2_2-TI2V-5B-Turbo_fp16.safetensors",
+    "publisher_sha256_full_file": "fa70f4f760bd97ed435e2a8206f0b459192d9955cd60414e2815ed0c5d147f16",
+    "tensor": "blocks.0.self_attn.q.weight",
+    "bytes": 18874368,
+    "tensor_sha256": "d9b561c2f20c89bbb6178af64fdaebfe226b2da3ca0cbbc3e794a4f70e36e2a4",
+    "cosine_sample": 0.9967287182807922,
+    "scope": "Byte-range download of one FP16 tensor. The complete upstream file was not downloaded."
+  },
+  "calibration": {
+    "q8_fixture": {
+      "before": 0.0003516893193591386,
+      "after": 1.2330562640272547e-05,
+      "bytes_before": 3392,
+      "bytes_after": 3392
+    },
+    "wan": {
+      "before_file_sha256": "8aa3a98c254bd02a9cc7e4f1db37720fe291cef8b0c32fb78e7a2391125d6b28",
+      "after_file_sha256": "a61b0d3573d968ede2d667c67607b67489baa3c295d30daeb0109d2d05c48ce6",
+      "changed": true,
+      "file_bytes_before": 3033897696,
+      "file_bytes_after": 3033897696,
+      "tensor": "blocks.0.self_attn.q.weight",
+      "calibration_log": [
+        "blocks.0.self_attn.q.weight \u00b7 \u043e\u0448\u0438\u0431\u043a\u0430 \u043d\u0430 \u043e\u0442\u043b\u043e\u0436\u0435\u043d\u043d\u044b\u0445 \u0430\u043a\u0442\u0438\u0432\u0430\u0446\u0438\u044f\u0445 119.26959 \u2192 112.57514 \u00b7 Q4_0",
+        "\u0422\u0435\u043d\u0437\u043e\u0440\u043e\u0432 \u0441 \u0443\u043b\u0443\u0447\u0448\u0435\u043d\u0438\u0435\u043c \u043f\u043e \u043f\u0440\u043e\u0432\u0435\u0440\u043e\u0447\u043d\u044b\u043c \u0430\u043a\u0442\u0438\u0432\u0430\u0446\u0438\u044f\u043c: 1/1"
+      ]
+    }
+  },
+  "calibrated_inference": {
+    "before_seconds": 95.89100000000326,
+    "after_seconds": 95.59399999998277,
+    "quality": [
+      {
+        "psnr_db": 46.352309698366724,
+        "pixels_equal": false,
+        "ssim": 0.9919789433479309
+      },
+      {
+        "psnr_db": 46.174235623277546,
+        "pixels_equal": false,
+        "ssim": 0.9913053512573242
+      },
+      {
+        "psnr_db": 46.281969168911345,
+        "pixels_equal": false,
+        "ssim": 0.9910421371459961
+      },
+      {
+        "psnr_db": 46.70435836363453,
+        "pixels_equal": false,
+        "ssim": 0.9909899830818176
+      },
+      {
+        "psnr_db": 48.43783710100545,
+        "pixels_equal": false,
+        "ssim": 0.9927504658699036
+      }
+    ],
+    "oom": false
+  },
+  "active_policy": "ABDM and MOSS Qwen restored to Q8_0. Existing photo and video Vulkan settings, YuE2 Vulkan, SA3 20 threads and RIFE 1:1:1 retained.",
+  "coverage": "Normal photo without upscale, Native 480p five frames, 150-token YuE2 render, 1.5-second SA3 and Vulkan RIFE on one clip. These include their active companion weights. Inactive variants, independent ONNX workflows and maximal video geometry are outside the measurements.",
+  "interpretation": "The calibrated Wan projection improved held-out layer error at the same tensor types and file size. The one full-request timing difference is too small to establish acceleration. The Q8_0 calibration example is synthetic."
+}
