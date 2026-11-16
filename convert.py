@@ -22,7 +22,8 @@ if not BACKENDS.is_dir():
     BACKENDS = HERE.parents[1] / 'build' / 'gguf-q8'
 PYTHON = Path(sys.executable).with_name('python.exe')
 USER_DIRECTORY = Path(os.environ.get('GGUF_CONVERTER_CWD', os.getcwd()))
-QUANTIZATIONS = ('Q8_0', 'Q4_0')
+GSQ_RCO = ('GSQ-RCO-Q2', 'GSQ-RCO-Q3', 'GSQ-RCO-Q4')
+QUANTIZATIONS = ('Q8_0', 'Q4_0', *GSQ_RCO)
 SAFETENSORS = {'.safetensors', '.sft'}
 MODES = {
     'auto': 'Авто',
@@ -345,6 +346,113 @@ class Conversion:
             writer.close()
         return result
 
+    def assemble_gsq_rco(self, manifest, output, bits):
+        """Assemble selected, already optimized GGUF tensors without requantization."""
+        if manifest.suffix.lower() != '.json' or not manifest.is_file():
+            raise ValueError('Для сборки GSQ-RCO выберите JSON-манифест оптимизированных тензоров.')
+        def unique_pairs(pairs):
+            result = dict(pairs)
+            if len(result) != len(pairs):
+                raise ValueError('В манифесте GSQ-RCO повторяется ключ.')
+            return result
+        plan = json.loads(manifest.read_text(encoding='utf-8-sig'), object_pairs_hook=unique_pairs)
+        if not isinstance(plan, dict) or plan.get('format') != 'gguf-gsq-rco-v1':
+            raise ValueError('Ожидается манифест формата gguf-gsq-rco-v1.')
+        targets = plan.get('targets')
+        target = targets.get(str(bits)) if isinstance(targets, dict) else None
+        if not isinstance(target, dict) or not isinstance(target.get('tensors'), dict) or not target['tensors']:
+            raise ValueError(f'В манифесте отсутствуют назначения тензоров для Q{bits}.')
+        assignments = target['tensors']
+        variants = plan.get('variants')
+        if not isinstance(variants, dict) or any(not isinstance(v, str) or v not in variants for v in assignments.values()):
+            raise ValueError('Назначения должны ссылаться на варианты из манифеста.')
+
+        def local_gguf(relative):
+            if not isinstance(relative, str):
+                raise ValueError('Варианты GSQ должны указывать на локальные файлы GGUF.')
+            source = (manifest.parent / relative).resolve(strict=True)
+            if source.suffix.lower() != '.gguf' or not source.is_file():
+                raise ValueError(f'Ожидается файл GGUF: {source.name}')
+            reader = open_gguf(source)
+            if SHARD.fullmatch(source.name) or reader.get_field('split.count') is not None:
+                raise ValueError('Для сборки GSQ-RCO используйте цельные GGUF.')
+            return reader
+
+        base = local_gguf(plan.get('base'))
+        architecture = base.get_field('general.architecture')
+        if (architecture is None or architecture.contents() in MEDIA_ARCHS
+                or base.get_field('tokenizer.ggml.model') is None):
+            raise ValueError('В режиме GSQ-RCO нужен GGUF текстовой модели с токенизатором.')
+        model_keys = {'general.architecture', 'general.type', 'tokenizer.ggml.model',
+                      'tokenizer.ggml.tokens', 'tokenizer.ggml.merges'}
+        model_keys.update(key for key in base.fields if key.startswith(architecture.contents() + '.'))
+        base_tensors = {t.name: t for t in base.tensors}
+        if assignments.keys() - base_tensors.keys():
+            raise ValueError('В назначениях RCO есть тензоры, которых нет в базовом GGUF.')
+        chosen = base_tensors.copy()
+        for label in sorted(set(assignments.values())):
+            variant = local_gguf(variants[label])
+            for key in sorted(model_keys):
+                original, alternate = base.get_field(key), variant.get_field(key)
+                if (original is None) != (alternate is None) or (original is not None and
+                        (original.types != alternate.types or original.contents() != alternate.contents())):
+                    raise ValueError(f'Вариант {label} не совпадает с базовой моделью по {key}.')
+            if variant.endianess != base.endianess:
+                raise ValueError('У базового файла и вариантов должен совпадать порядок байтов.')
+            tensors = {t.name: t for t in variant.tensors}
+            for name, selected in assignments.items():
+                if selected != label:
+                    continue
+                candidate = tensors.get(name)
+                if candidate is None or tuple(candidate.shape) != tuple(base_tensors[name].shape):
+                    raise ValueError(f'Вариант {label} не содержит тензор нужной формы: {name}')
+                if candidate.tensor_type.name in PLAIN_TYPES | {'I8'}:
+                    raise ValueError(f'Для {name} нужен квантованный тензор GSQ в формате GGUF.')
+                chosen[name] = candidate
+        counts = Counter(t.tensor_type.name for t in chosen.values())
+        if len(counts.keys() - PLAIN_TYPES - {'I8'}) < 2:
+            raise ValueError('Для сборки GSQ-RCO ожидаются минимум два типа квантованных тензоров.')
+        size = sum(t.n_bytes for t in chosen.values())
+        elements = sum(t.n_elements for t in chosen.values())
+        budget = target.get('max_tensor_bytes')
+        if budget is not None and (type(budget) is not int or budget < size):
+            raise ValueError(f'Объём тензоров {size} байт превышает бюджет манифеста или бюджет задан неверно.')
+        if not elements:
+            raise ValueError('Базовый GGUF не содержит весов.')
+        with tempfile.TemporaryDirectory(prefix='.gguf-gsq-rco-', dir=output.parent) as temporary:
+            stage = Path(temporary) / 'result.gguf'
+            writer = gguf_module('gguf_writer').GGUFWriter(stage, architecture.contents(), endianess=base.endianess)
+            try:
+                for key, field in base.fields.items():
+                    if key.startswith(('GGUF.', 'split.')) or key in ('general.architecture', 'general.file_type'):
+                        continue
+                    if key == 'general.alignment':
+                        writer.add_custom_alignment(field.contents())
+                    elif field.types:
+                        writer.add_key_value(key, field.contents(), field.types[0],
+                                             field.types[1] if len(field.types) > 1 else None)
+                for tensor in chosen.values():
+                    writer.add_tensor_info(tensor.name, tensor.data.shape, tensor.data.dtype,
+                                           tensor.n_bytes, tensor.tensor_type)
+                writer.write_header_to_file()
+                writer.write_kv_data_to_file()
+                writer.write_ti_data_to_file()
+                for tensor in chosen.values():
+                    if self.cancelled:
+                        raise InterruptedError('Конвертация отменена.')
+                    writer.write_tensor_data(tensor.data, tensor_endianess=base.endianess)
+            finally:
+                writer.close()
+            _, actual_types = read_gguf(stage)
+            if actual_types != {name: tensor.tensor_type.name for name, tensor in chosen.items()}:
+                raise ValueError('Распределение типов в выходном GGUF не совпало с манифестом.')
+            with self.lock:
+                if self.cancelled:
+                    raise InterruptedError('Конвертация отменена.')
+                stage.rename(output)
+        self.log(f'Готово: {output}\nТензоры: {dict(counts)}. Весовой объём: {8*size/elements:.3f} бит/параметр.')
+        return output
+
     def convert(self, source, output=None, mode='auto', threads=None, quantization='Q8_0'):
         if quantization not in QUANTIZATIONS:
             raise ValueError(f'Неизвестный формат GGUF {quantization}.')
@@ -357,6 +465,10 @@ class Conversion:
         output = output.parent.resolve(strict=True) / output.name
         if os.path.lexists(output):
             raise FileExistsError(f'Файл уже существует. Выберите другое имя: {output}')
+        if quantization in GSQ_RCO:
+            if mode not in ('auto', 'text'):
+                raise ValueError('Сборка GSQ-RCO принимает манифест текстовой модели в режиме Авто или Текстовая модель.')
+            return self.assemble_gsq_rco(source, output, int(quantization[-1]))
         source, mode = route(source, mode)
         expand = False
         if mode in ('diffusion', 'moss-image', 'moss-text'):
@@ -436,7 +548,7 @@ def gui(source=''):
 
     def select_input(folder=False):
         value = filedialog.askdirectory(initialdir=USER_DIRECTORY) if folder else filedialog.askopenfilename(initialdir=USER_DIRECTORY,
-            filetypes=[('Файлы моделей', '*.gguf *.safetensors *.sft *.ckpt *.bin'), ('Все файлы', '*.*')])
+            filetypes=[('Модели и манифест GSQ-RCO', '*.gguf *.safetensors *.sft *.ckpt *.bin *.json'), ('Все файлы', '*.*')])
         if value:
             input_value.set(value)
             output_value.set(str(suggested_output(Path(value), quantization_value.get())))
@@ -530,7 +642,7 @@ def gui(source=''):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Преобразование моделей в GGUF Q8_0 или Q4_0')
+    parser = argparse.ArgumentParser(description='Конвертация в Q8_0/Q4_0 и сборка GSQ-RCO по манифесту')
     parser.add_argument('source', nargs='?')
     parser.add_argument('-o', '--output')
     parser.add_argument('--mode', choices=MODES, default='auto')

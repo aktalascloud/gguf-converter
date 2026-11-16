@@ -15,6 +15,31 @@
 
 Пример запуска из PowerShell.
 
+## Сборка GSQ-RCO
+
+Выберите **GSQ-RCO-Q2**, **GSQ-RCO-Q3** или **GSQ-RCO-Q4** и откройте JSON-манифест. Конвертер побайтно копирует упакованные тензоры из заранее оптимизированных GSQ-файлов по карте назначений RCO. Калибровка GSQ и поиск RCO выполняются отдельно. Портативный EXE собирает итоговый GGUF локально. [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO)
+
+```json
+{
+  "format": "gguf-gsq-rco-v1",
+  "base": "model-base.gguf",
+  "variants": {
+    "q2": "model-gsq-q2.gguf",
+    "q3": "model-gsq-q3.gguf"
+  },
+  "targets": {
+    "2": {
+      "tensors": {
+        "blk.0.attn_q.weight": "q2",
+        "blk.0.ffn_up.weight": "q3"
+      }
+    }
+  }
+}
+```
+
+Пути задаются относительно манифеста. Добавьте нужные цели в targets. Значение каждого назначения указывает на файл из variants. Остальные тензоры берутся из базового файла. Необязательный max_tensor_bytes ограничивает общий размер всех тензоров. Конвертер выводит фактическое число бит на параметр.
+
 ```powershell
 Start-Process -FilePath '.\GGUF-Converter.exe' -ArgumentList '--cli "D:\Модели\Модель" -q Q4_0 -t 8' -Wait -PassThru
 ```
