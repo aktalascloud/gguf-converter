@@ -109,6 +109,17 @@ def included(relative):
     return True
 
 
+def build_vulkan(args, destination):
+    destination.mkdir()
+    source = HERE / 'vulkan'
+    for mode in ('gsq', 'rco'):
+        subprocess.run([str(args.glslc), '--target-env=vulkan1.1', '-O',
+                        str(source / f'{mode}.comp'), '-o', str(destination / f'{mode}.spv')], check=True)
+    subprocess.run([str(args.cxx), '-std=c++17', '-O2', '-municode', '-static', '-static-libgcc', '-static-libstdc++',
+                    '-I' + str(args.vulkan_include), str(source / 'vulkan-gsq.cpp'),
+                    str(args.vulkan_import), '-o', str(destination / 'vulkan-gsq.exe')], check=True)
+
+
 def build(args):
     pins = json.loads((HERE / 'dependencies.lock.json').read_text(encoding='utf-8'))
     cache = args.cache.resolve()
@@ -141,10 +152,13 @@ def build(args):
         for engine in ('llama', 'sd'):
             copy_crt(crt, backends / engine)
         shutil.copytree(args.hf, backends / 'hf', ignore=shutil.ignore_patterns('__pycache__', 'tests', 'examples'))
-        for filename in ('convert.py', 'hf.py', 'moss_convert.py', 'media_weights.py', 'LICENSE.md', 'NOTICE.md'):
+        for filename in ('convert.py', 'hf.py', 'moss_convert.py', 'media_weights.py', 'vulkan_workflow.py',
+                         'LICENSE.md', 'NOTICE.md'):
             shutil.copyfile(HERE / filename, app / filename)
         shutil.copytree(HERE / 'licenses', app / 'licenses')
         shutil.copyfile(HERE / 'dependencies.lock.json', app / 'dependencies.lock.json')
+        if args.vulkan_include:
+            build_vulkan(args, app / 'vulkan')
 
         payload = workspace / 'converter.zip'
         with zipfile.ZipFile(payload, 'w', zipfile.ZIP_DEFLATED, compresslevel=3) as archive:
@@ -175,4 +189,12 @@ if __name__ == '__main__':
     parser.add_argument('--cache', type=Path, default=HERE / 'build-assets')
     parser.add_argument('--hf', type=Path, default=HERE / 'vendor' / 'hf')
     parser.add_argument('--output', type=Path, default=HERE / 'dist' / 'GGUF-Converter.exe')
-    build(parser.parse_args())
+    parser.add_argument('--cxx', type=Path)
+    parser.add_argument('--glslc', type=Path)
+    parser.add_argument('--vulkan-include', type=Path)
+    parser.add_argument('--vulkan-import', type=Path)
+    args = parser.parse_args()
+    options = (args.cxx, args.glslc, args.vulkan_include, args.vulkan_import)
+    if any(options) and not all(options):
+        parser.error('Vulkan builds require --cxx, --glslc, --vulkan-include and --vulkan-import together.')
+    build(args)

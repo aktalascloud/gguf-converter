@@ -1,0 +1,154 @@
+#version 450
+layout(local_size_x=256) in;
+layout(binding=0,std430) readonly buffer Inputs { float input_data[]; };
+layout(binding=1,std430) writeonly buffer Outputs { float output_data[]; };
+layout(push_constant) uniform Config {
+    uint blocks;
+    uint steps;
+    uint samples;
+    uint bits;
+    uint seed;
+    float target;
+} pc;
+shared float error_row[256];
+shared float residual[32];
+shared float scale_gradient[256];
+shared float scales[8];
+shared float scale_momentum[8];
+shared float hard_row[256];
+shared float current_loss;
+shared float best_loss;
+
+uint mix_bits(uint x) {
+    x ^= x >> 16;
+    x *= 0x7feb352du;
+    x ^= x >> 15;
+    x *= 0x846ca68bu;
+    return x ^ (x >> 16);
+}
+
+float activation(uint block_id, uint sample_id, uint column) {
+    return input_data[pc.blocks*256u + (block_id*pc.samples+sample_id)*256u+column];
+}
+
+void main() {
+    uint block_id=gl_WorkGroupID.x,lane=gl_LocalInvocationIndex,group_id=lane/32u;
+    uint base=block_id*256u;
+    float w=input_data[base+lane];
+    int levels=1 << int(pc.bits),lo=-levels/2,hi=levels/2-1;
+    uint options=pc.bits==2u ? 4u : 5u;
+    if (lane%32u==0u) {
+        float scale=0.0000001;
+        for (uint column=lane;column<lane+32u;++column) {
+            float value=input_data[base+column];
+            scale=max(scale,value<0.0 ? value/float(lo) : value/float(hi));
+        }
+        scales[group_id]=scale;
+        scale_momentum[group_id]=0.0;
+    }
+    if (lane==0u) best_loss=3.402823e38;
+    barrier();
+    float initial_scale=scales[group_id];
+    int initial_code=int(clamp(roundEven(w/initial_scale),float(lo),float(hi)));
+    int choices[5];
+    float logits[5],momentum[5];
+    for (uint k=0u;k<options;++k) {
+        int code=pc.bits==2u ? int(k)+lo : initial_code+int(k)-2;
+        choices[k]=code;
+        float difference=float(code)-float(initial_code);
+        logits[k]=-0.5*difference*difference;
+        momentum[k]=0.0;
+    }
+
+    int best_code=initial_code;
+    float best_scale=initial_scale;
+    for (uint step=0u;step<=pc.steps;++step) {
+        float scale=scales[group_id];
+        int hard=initial_code;
+        float hard_logit=-1e30;
+        for (uint k=0u;k<options;++k) {
+            if (choices[k]>=lo && choices[k]<=hi && logits[k]>hard_logit) {
+                hard_logit=logits[k];
+                hard=choices[k];
+            }
+        }
+        hard_row[lane]=float(hard)*scale;
+        error_row[lane]=hard_row[lane]-w;
+        barrier();
+        if (lane<pc.samples) {
+            float value=0.0;
+            for (uint j=0u;j<256u;++j) value+=error_row[j]*activation(block_id,lane,j);
+            residual[lane]=value*value;
+        }
+        barrier();
+        if (lane==0u) {
+            current_loss=0.0;
+            for (uint j=0u;j<pc.samples;++j) current_loss+=residual[j];
+            current_loss/=float(pc.samples);
+        }
+        barrier();
+        if (current_loss<best_loss) {
+            best_code=hard;
+            best_scale=scale;
+        }
+        barrier();
+        if (lane==0u) {
+            best_loss=min(best_loss,current_loss);
+            if (step==0u) output_data[pc.blocks*256u+block_id*2u]=current_loss;
+        }
+        barrier();
+        if (step==pc.steps) break;
+
+        float progress=float(step)/max(1.0,float(pc.steps)-1.0);
+        float temperature=mix(2.0,0.15,progress);
+        float gain=mix(1.0,3.0,progress);
+        float prob[5];
+        float peak=-1e30;
+        for (uint k=0u;k<options;++k) {
+            uint seed=mix_bits(pc.seed ^ (1u+base+lane)*747796405u ^ (step+1u)*2891336453u ^ (k+1u)*277803737u);
+            float u=(float(seed >> 8)+0.5)*(1.0/16777216.0);
+            u=clamp(u,0.0000001,0.9999999);
+            float gumbel=-log(-log(u));
+            prob[k]=(choices[k]>=lo && choices[k]<=hi) ? (logits[k]*gain+gumbel)/temperature : -1e30;
+            peak=max(peak,prob[k]);
+        }
+        float total=0.0;
+        for (uint k=0u;k<options;++k) {
+            prob[k]=exp(prob[k]-peak);
+            total+=prob[k];
+        }
+        float relaxed=0.0;
+        for (uint k=0u;k<options;++k) {
+            prob[k]/=total;
+            relaxed+=prob[k]*float(choices[k]);
+        }
+        error_row[lane]=scale*relaxed-w;
+        barrier();
+        if (lane<pc.samples) {
+            float value=0.0;
+            for (uint j=0u;j<256u;++j) value+=error_row[j]*activation(block_id,lane,j);
+            residual[lane]=value;
+        }
+        barrier();
+        float grad=0.0;
+        for (uint j=0u;j<pc.samples;++j) grad+=residual[j]*activation(block_id,j,lane);
+        grad*=2.0/float(pc.samples);
+        for (uint k=0u;k<options;++k) {
+            float g=grad*scale*gain/temperature*prob[k]*(float(choices[k])-relaxed);
+            logits[k]-=0.03*sign(0.9*momentum[k]+0.1*g);
+            momentum[k]=0.99*momentum[k]+0.01*g;
+        }
+        scale_gradient[lane]=grad*relaxed;
+        barrier();
+        if (lane%32u==0u) {
+            float g=0.0;
+            for (uint j=lane;j<lane+32u;++j) g+=scale_gradient[j];
+            scales[group_id]=max(initial_scale*0.25,scale-0.005*initial_scale*sign(0.9*scale_momentum[group_id]+0.1*g));
+            scale_momentum[group_id]=0.99*scale_momentum[group_id]+0.01*g;
+        }
+        barrier();
+    }
+    output_data[base+lane]=float(best_code);
+    if (lane%32u==0u) output_data[pc.blocks*258u+block_id*8u+group_id]=best_scale;
+    if (lane==0u) output_data[pc.blocks*256u+block_id*2u+1u]=best_loss;
+}

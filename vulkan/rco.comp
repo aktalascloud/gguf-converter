@@ -1,0 +1,197 @@
+#version 450
+layout(local_size_x=1) in;
+layout(binding=0,std430) readonly buffer Inputs { float signals[]; };
+layout(binding=1,std430) writeonly buffer Outputs { float output_data[]; };
+layout(push_constant) uniform Config {
+    uint groups;
+    uint steps;
+    uint samples;
+    uint variants;
+    uint seed;
+    float target;
+} pc;
+const uint width=24u;
+float alpha[width];
+float p[width];
+float normal[width];
+float first[width];
+float second[width];
+float grad[width];
+
+float cost(uint index) { return signals[index]; }
+float response(uint index,uint sample_id) {return signals[pc.groups*pc.variants+index*pc.samples+sample_id];}
+
+float probabilities(float shift) {
+    float budget=0.0;
+    for (uint g=0u;g<pc.groups;++g) {
+        uint b=g*pc.variants;
+        float peak=-1e30;
+        for (uint j=0u;j<pc.variants;++j) peak=max(peak,alpha[b+j]+shift*cost(b+j));
+        float total=0.0;
+        for (uint j=0u;j<pc.variants;++j) {
+            uint i=b+j;
+            p[i]=exp(alpha[i]+shift*cost(i)-peak);
+            total+=p[i];
+        }
+        float expectation=0.0;
+        for (uint j=0u;j<pc.variants;++j) {
+            uint i=b+j;
+            p[i]/=total;
+            expectation+=p[i]*cost(i);
+        }
+        for (uint j=0u;j<pc.variants;++j) {
+            uint i=b+j;
+            normal[i]=p[i]*(cost(i)-expectation);
+        }
+        budget+=expectation;
+    }
+    return budget;
+}
+
+float retract() {
+    float lo=-1.0,hi=1.0;
+    for (int k=0;k<24;++k) {
+        if (probabilities(lo)>pc.target) lo*=2.0;
+        if (probabilities(hi)<pc.target) hi*=2.0;
+    }
+    for (int k=0;k<32;++k) {
+        float mid=0.5*(lo+hi);
+        if (probabilities(mid)>pc.target) hi=mid;
+        else lo=mid;
+    }
+    float shift=0.5*(lo+hi);
+    for (uint i=0u;i<pc.groups*pc.variants;++i) alpha[i]+=shift*cost(i);
+    return probabilities(0.0);
+}
+
+uint mix_bits(uint x) {
+    x ^= x >> 16;
+    x *= 0x7feb352du;
+    x ^= x >> 15;
+    x *= 0x846ca68bu;
+    return x ^ (x >> 16);
+}
+
+float gradient(uint step) {
+    uint selected[8];
+    float probability[width];
+    for (uint g=0u;g<pc.groups;++g) {
+        uint b=g*pc.variants;
+        float peak=-1e30,total=0.0;
+        for (uint j=0u;j<pc.variants;++j) {
+            uint i=b+j;
+            uint seed=mix_bits(pc.seed ^ (i+1u)*747796405u ^ (step+1u)*277803737u);
+            float u=clamp((float(seed >> 8)+0.5)/16777216.0,0.0000001,0.9999999);
+            probability[i]=alpha[i]-log(-log(u));
+            if (probability[i]>peak) {
+                peak=probability[i];
+                selected[g]=i;
+            }
+        }
+        float tau=mix(1.8,0.35,float(step)/max(1.0,float(pc.steps-1u)));
+        for (uint j=0u;j<pc.variants;++j) {
+            uint i=b+j;
+            probability[i]=exp((probability[i]-peak)/tau);
+            total+=probability[i];
+            grad[i]=0.0;
+        }
+        for (uint j=0u;j<pc.variants;++j) probability[b+j]/=total;
+    }
+    float loss=0.0;
+    for (uint sample_id=0u;sample_id<pc.samples;++sample_id) {
+        float value=0.0;
+        for (uint g=0u;g<pc.groups;++g) value+=response(selected[g],sample_id);
+        loss+=value*value;
+        for (uint g=0u;g<pc.groups;++g) {
+            uint b=g*pc.variants;
+            float expectation=0.0;
+            for (uint j=0u;j<pc.variants;++j) expectation+=probability[b+j]*response(b+j,sample_id);
+            for (uint j=0u;j<pc.variants;++j) {
+                uint i=b+j;
+                grad[i]+=probability[i]*(response(i,sample_id)-expectation)*value;
+            }
+        }
+    }
+    float tau=mix(1.8,0.35,float(step)/max(1.0,float(pc.steps-1u)));
+    for (uint i=0u;i<pc.groups*pc.variants;++i) grad[i]*=2.0/(float(pc.samples)*tau);
+    return loss/float(pc.samples);
+}
+
+void main() {
+    uint n=pc.groups*pc.variants;
+    for (uint i=0u;i<n;++i) {
+        alpha[i]=0.0;
+        first[i]=0.0;
+        second[i]=0.0;
+    }
+    retract();
+    float max_residual=0.0, beta1_power=1.0, beta2_power=1.0;
+    for (uint step=0u;step<pc.steps;++step) {
+        gradient(step);
+        float dot_gradient=0.0,dot_normal=0.0;
+        for (uint i=0u;i<n;++i) {
+            dot_gradient+=grad[i]*normal[i];
+            dot_normal+=normal[i]*normal[i];
+        }
+        float coefficient=dot_gradient/max(1e-12,dot_normal);
+        beta1_power*=0.9;
+        beta2_power*=0.999;
+        for (uint i=0u;i<n;++i) {
+            float g=grad[i]-coefficient*normal[i];
+            first[i]=0.9*first[i]+0.1*g;
+            second[i]=0.999*second[i]+0.001*g*g;
+            alpha[i]-=0.08*(first[i]/(1.0-beta1_power))/(sqrt(second[i]/(1.0-beta2_power))+1e-8);
+        }
+        float budget=retract();
+        max_residual=max(max_residual,abs(budget-pc.target));
+        float dot_first=0.0;
+        dot_normal=0.0;
+        for (uint i=0u;i<n;++i) {
+            dot_first+=first[i]*normal[i];
+            dot_normal+=normal[i]*normal[i];
+        }
+        coefficient=dot_first/max(1e-12,dot_normal);
+        for (uint i=0u;i<n;++i) first[i]-=coefficient*normal[i];
+    }
+
+    // Exact bounded selection by total logit score under the serialized byte budget.
+    // ponytail: enumerate up to eight groups; use a budget DP for full checkpoints.
+    uint choices=1u;
+    for (uint g=0u;g<pc.groups;++g) choices*=pc.variants;
+    uint selected_code=0u;
+    float best=-1e30;
+    for (uint code=0u;code<choices;++code) {
+        uint state=code;
+        float score=0.0,budget=0.0;
+        for (uint g=0u;g<pc.groups;++g) {
+            uint i=g*pc.variants+state%pc.variants;
+            state/=pc.variants;
+            budget+=cost(i);
+            score+=alpha[i];
+        }
+        if (budget<=pc.target && score>best) {
+            best=score;
+            selected_code=code;
+        }
+    }
+    float hard_cost=0.0;
+    uint selected[8];
+    for (uint g=0u;g<pc.groups;++g) {
+        uint choice=selected_code%pc.variants;
+        selected_code/=pc.variants;
+        selected[g]=g*pc.variants+choice;
+        hard_cost+=cost(selected[g]);
+        output_data[g]=float(choice);
+    }
+    float loss=0.0;
+    for (uint j=0u;j<pc.samples;++j) {
+        float value=0.0;
+        for (uint g=0u;g<pc.groups;++g) value+=response(selected[g],j);
+        loss+=value*value;
+    }
+    output_data[pc.groups]=probabilities(0.0);
+    output_data[pc.groups+1u]=hard_cost;
+    output_data[pc.groups+2u]=loss/float(pc.samples);
+    output_data[pc.groups+3u]=max_residual;
+    for (uint i=0u;i<n;++i) output_data[pc.groups+4u+i]=alpha[i];
+}

@@ -9,3 +9,5 @@ CPython 3.11.18 and Tcl/Tk come from the public Python Build Standalone archive,
 The Microsoft Visual C++ runtime files are unmodified x64 redistributable components from the signed Microsoft 14.51.36247 installer. Microsoft's terms apply to these components. The launcher uses them from its temporary application folder. [Microsoft redistributable list](https://learn.microsoft.com/en-us/visualstudio/releases/2026/redistribution).
 
 The AWQ and bitsandbytes adapters use the documented packing layouts and codebooks. [AutoAWQ packing](https://github.com/casper-hansen/AutoAWQ/blob/main/awq/utils/packing_utils.py) · [bitsandbytes quantization state](https://github.com/bitsandbytes-foundation/bitsandbytes/blob/main/bitsandbytes/functional.py).
+
+The Vulkan calibration and search helper implements ideas from the GSQ and RCO papers. The hardware interface uses Vulkan-Headers and the Windows Vulkan loader supplied by the GPU driver. [GSQ paper](https://arxiv.org/abs/2604.18556) · [RCO paper](https://arxiv.org/abs/2605.00649) · [Vulkan-Headers licenses](https://github.com/KhronosGroup/Vulkan-Headers/tree/main/LICENSES).
