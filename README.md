@@ -2,7 +2,7 @@
 
 [Русский](README.ru.md) · [Download the portable EXE](https://github.com/aktalascloud/gguf-converter/releases/latest)
 
-Convert local model weights to **Q2, Q4, Q6 or Q8** on Windows 10/11 x64. Open `GGUF-Converter.exe`, select a supported file or Hugging Face directory, and choose the quantization. The app detects text, image and video models from metadata and recognized tensor structures. The window displays the resulting GGUF type and reports the exact file size after conversion. Python and the conversion tools are bundled.
+Convert local model weights to **Q2, Q4, Q6 or Q8** on Windows 10/11 x64. Open `GGUF-Converter.exe`, select a supported file or Hugging Face directory, and choose the quantization. The window detects the model and hardware, estimates the resulting file size before conversion, and shows the active stage and exact size after conversion. Python and the conversion tools are bundled.
 
 | Input | Conversion path |
 |---|---|
@@ -15,11 +15,11 @@ The converter writes a separate GGUF and protects existing files from replacemen
 
 ### Target hardware
 
-Choose the GPU and CPU targets independently. For example, Vulkan with AVX and CUDA/Pascal P40 with AVX2 both produce standard GGUF. Universal uses `Q2_K`, `Q4_K`, `Q6_K`, or `Q8_0`. Q4 uses `Q4_0` when the GPU is Polaris/Pascal or the CPU target is AVX/AVX2. The other choices retain their standard formats. NVIDIA CUDA / INT8 selects Q8 in the window. The inference runtime selects Vulkan, AVX, or CUDA kernels at load time. CUDA is unnecessary for conversion. Eligible CPU builds can repack `Q4_0` at load time. Pascal P40 supports INT8 dot products with a compatible CUDA runtime. [GGML runtime repacking](https://github.com/ggml-org/llama.cpp/blob/master/ggml/CMakeLists.txt) · [NVIDIA Pascal DP4A](https://developer.nvidia.com/blog/mixed-precision-programming-cuda-8/)
+CPU instructions and GPU memory are detected automatically. The Q4 choice uses `Q4_0` on recognized Polaris, AVX and AVX2 hosts. Recommendations leave memory headroom and keep the chosen tier intact. A context estimate is available for recognized text architectures with enough metadata for an F16 KV cache. Media estimates cover the selected file. Separate weights and model-specific inference buffers can increase memory requirements. [GGML runtime repacking](https://github.com/ggml-org/llama.cpp/blob/master/ggml/CMakeLists.txt) · [Vulkan memory budget](https://docs.vulkan.org/refpages/latest/refpages/source/VK_EXT_memory_budget.html)
 
 ## Vulkan GSQ-RCO preview
 
-Enable **GSQ/RCO (Vulkan)** and open a media GGUF or a `gguf-gsq-rco-vulkan-v1` manifest. A media GGUF uses automatic activation capture in the bundled Vulkan media worker. Provide a calibration prompt and optionally a `.kcpps` profile for the companion weights. Direct GGUF selection calibrates two recognized attention projections. The manifest controls up to eight matrices and also supports Q3 through the CLI. GSQ writes standard Q2_K, Q3_K, Q4_K, Q6_K or Q8_0 tensor variants. The optimization mode disables both target selectors and requires a supported AMD Polaris driver. The capture worker uses an AVX2 host build. [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO)
+Enable **GSQ/RCO calibration** and open a media GGUF or a `gguf-gsq-rco-vulkan-v1` manifest. The bundled calibration uses Vulkan shaders on a supported AMD Polaris GPU. The media worker needs AVX2 to record activations. A matching local KoboldCpp profile supplies companion weights automatically, including when the selected GGUF is its text encoder. Direct GGUF selection calibrates two recognized attention projections. A manifest can cover up to eight matrices and supports Q3 through the CLI. [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO)
 
 ```json
 {

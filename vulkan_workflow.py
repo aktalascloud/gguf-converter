@@ -122,6 +122,8 @@ def build_variants(converter, binaries, work, tensor, inputs, steps, seed, quant
     normalized = []
     for bits, kind in zip(bits_options, types):
         converter.log(f'Vulkan GSQ · {tensor.name} · {kind.name}')
+        progress_label = f'Калибровка GSQ · {kind.name}'
+        converter.stage(progress_label, 0, rows)
         block_bytes = BLOCK_BYTES[bits]
         candidate = np.memmap(work / f'q{bits}.bin', dtype=np.uint8, mode='w+',
                               shape=(rows, blocks * block_bytes))
@@ -142,6 +144,7 @@ def build_variants(converter, binaries, work, tensor, inputs, steps, seed, quant
             candidate[start:start + len(original)] = packed.reshape(len(original), -1)
             if baseline is not None:
                 baseline[start:start + len(original)] = rounded.reshape(len(original), -1)
+            converter.stage(progress_label, start + len(original), rows)
             dense = decode(packed).reshape(original.shape)
             delta = (dense - original) @ x.T
             score = original @ x.T
@@ -203,6 +206,7 @@ def optimize(converter, manifest, base, target, output, gguf_module, tier, captu
             from native_capture import collect
             directory = root / 'capture'
             directory.mkdir()
+            converter.stage('Сбор активаций Vulkan')
             recorded, settings, payload = collect(converter, manifest, reference, capture, automatic, directory, detect)
             entries = [(t, path if path is not None else recorded[t.name]) for t, path in entries]
         variants = []
@@ -226,6 +230,7 @@ def optimize(converter, manifest, base, target, output, gguf_module, tier, captu
             unit = high - low
             norm_costs = (np.asarray(costs, dtype=np.float64) - np.asarray(costs)[:, :1]) / unit
             search_budget = np.clip((available - low) / unit, 1e-6, 1 - 1e-6)
+            converter.stage('Поиск RCO')
             raw = dispatch(converter.run, binaries, root, 'rco',
                            np.concatenate((norm_costs.ravel(), response.ravel())), len(entries), 64, len(entries),
                            len(bits_options), 1729, search_budget)
@@ -257,6 +262,7 @@ def choose_render(converter, binaries, root, base, output, recipe, entries, type
 
     # The reference and candidates must have the same graph execution path.
     # Activation collection can split GPU graph submissions near the captured node.
+    converter.stage('Рендер исходной модели')
     expected = pixels(render(converter, settings, payload, root / 'eval-reference'))
     selected = None
     best = float('inf')
@@ -286,6 +292,7 @@ def choose_render(converter, binaries, root, base, output, recipe, entries, type
             files[key] = candidate, slots
         config = dict(settings)
         config[recipe.get('base_part', 'sdmodel')] = str(candidate)
+        converter.stage(f'Рендер кандидата {index + 1} из {len(candidates)}', index, len(candidates))
         actual = pixels(render(converter, config, payload, root / f'eval-{index}'))
         if actual.shape != expected.shape:
             raise ValueError('Калибровочные рендеры различаются по размеру.')

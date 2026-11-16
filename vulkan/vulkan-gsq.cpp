@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iomanip>
 #include <stdexcept>
 #include <vector>
 
@@ -58,7 +59,52 @@ static uint32_t integer(const wchar_t * value, unsigned max) {
     return uint32_t(result);
 }
 
+static bool is_polaris(const vk::PhysicalDeviceProperties & properties) {
+    return properties.vendorID==0x1002 && (properties.deviceID==0x67df || properties.deviceID==0x6fdf);
+}
+
+static void probe(vk::Instance instance) {
+    for (const auto device : instance.enumeratePhysicalDevices()) {
+        const auto props=device.getProperties();
+        if (props.deviceType!=vk::PhysicalDeviceType::eDiscreteGpu &&
+            props.deviceType!=vk::PhysicalDeviceType::eIntegratedGpu) continue;
+        const auto memory=device.getMemoryProperties();
+        const auto extensions=device.enumerateDeviceExtensionProperties();
+        const bool reports_budget=props.apiVersion>=VK_API_VERSION_1_1 && std::any_of(extensions.begin(),extensions.end(),[](const auto & ext) {
+            return std::strcmp(ext.extensionName.data(),VK_EXT_MEMORY_BUDGET_EXTENSION_NAME)==0;
+        });
+        vk::PhysicalDeviceMemoryBudgetPropertiesEXT budget;
+        if (reports_budget) {
+            vk::PhysicalDeviceMemoryProperties2 properties;
+            properties.pNext=&budget;
+            device.getMemoryProperties2(&properties);
+        }
+        vk::DeviceSize capacity=0,available=0;
+        for (uint32_t i=0;i<memory.memoryHeapCount;++i) {
+            if (!(memory.memoryHeaps[i].flags & vk::MemoryHeapFlagBits::eDeviceLocal)) continue;
+            capacity+=memory.memoryHeaps[i].size;
+            if (reports_budget && budget.heapBudget[i]>budget.heapUsage[i]) {
+                available+=std::min(memory.memoryHeaps[i].size,budget.heapBudget[i]-budget.heapUsage[i]);
+            }
+        }
+        const auto queues=device.getQueueFamilyProperties();
+        const bool compute=std::any_of(queues.begin(),queues.end(),[](const auto & queue) {
+            return queue.timestampValidBits && bool(queue.queueFlags & vk::QueueFlagBits::eCompute);
+        });
+        std::cout << props.vendorID << '\t' << props.deviceID << '\t'
+                  << (props.deviceType==vk::PhysicalDeviceType::eDiscreteGpu ? capacity : 0) << '\t'
+                  << (reports_budget && props.deviceType==vk::PhysicalDeviceType::eDiscreteGpu) << '\t' << available << '\t'
+                  << (compute && is_polaris(props)) << '\t' << std::quoted(props.deviceName.data()) << '\n';
+    }
+}
+
 int wmain(int argc, wchar_t ** argv) try {
+    const vk::ApplicationInfo app("GGUF Converter GSQ and RCO",1,"",0,VK_API_VERSION_1_1);
+    if (argc==2 && std::wcscmp(argv[1],L"--probe")==0) {
+        const auto instance=vk::createInstanceUnique({{},&app});
+        probe(*instance);
+        return 0;
+    }
     if (argc!=12) throw std::runtime_error("usage: vulkan-gsq MODE INPUT OUTPUT SHADER BLOCKS STEPS SAMPLES BITS SEED TARGET REPEATS");
     const bool rco=std::wcscmp(argv[1],L"rco")==0;
     const bool loss=std::wcscmp(argv[1],L"loss")==0;
@@ -91,12 +137,11 @@ int wmain(int argc, wchar_t ** argv) try {
         if (target<=min_cost || target>=max_cost) throw std::runtime_error("budget must lie strictly within the feasible continuous range");
     }
 
-    const vk::ApplicationInfo app("GGUF Converter GSQ and RCO",1,"",0,VK_API_VERSION_1_1);
     const auto instance=vk::createInstanceUnique({{},&app});
     vk::PhysicalDevice physical;
     for (const auto & candidate:instance->enumeratePhysicalDevices()) {
         const auto p=candidate.getProperties();
-        if (p.vendorID==0x1002 && (p.deviceID==0x67df || p.deviceID==0x6fdf)) {
+        if (is_polaris(p)) {
             physical=candidate;
             break;
         }

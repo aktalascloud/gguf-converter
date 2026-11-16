@@ -19,11 +19,17 @@ import threading
 from types import ModuleType
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+try:
+    import hardware
+finally:
+    sys.path.pop(0)
 BACKENDS = HERE / 'backends'
 if not BACKENDS.is_dir():
     BACKENDS = HERE.parents[1] / 'gguf-q8'
 PYTHON = Path(sys.executable).with_name('python.exe')
 USER_DIRECTORY = Path(os.environ.get('GGUF_CONVERTER_CWD', os.getcwd()))
+HARDWARE_HELPER = HERE / 'vulkan/vulkan-gsq.exe'
 FORMATS = {'Q2': 'Q2_K', 'Q4': 'Q4_K', 'Q6': 'Q6_K', 'Q8': 'Q8_0'}
 GPU_TARGETS = {
     'auto': 'Универсальный GGUF',
@@ -332,11 +338,16 @@ def validate_media(source, moss):
 
 
 class Conversion:
-    def __init__(self, log=print):
+    def __init__(self, log=print, progress=None):
         self.log = log
+        self.progress = progress
         self.lock = threading.Lock()
         self.cancelled = False
         self.child = None
+
+    def stage(self, label, done=None, total=None):
+        if self.progress:
+            self.progress(label, done, total)
 
     def cancel(self):
         with self.lock:
@@ -358,6 +369,8 @@ class Conversion:
         with self.lock:
             if self.cancelled:
                 raise InterruptedError('Конвертация отменена.')
+            if executable.name != 'vulkan-gsq.exe':
+                self.stage(f'Обработка · {executable.name}')
             self.child = child = subprocess.Popen(
                 [str(executable), *map(str, args)], cwd=cwd or executable.parent, env=env,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8',
@@ -367,7 +380,12 @@ class Conversion:
             with child.stdout:
                 for line in child.stdout:
                     if line.strip():
-                        self.log(ANSI.sub('', line.rstrip()))
+                        cleaned = ANSI.sub('', line.rstrip())
+                        self.log(cleaned)
+                        if executable.name in ('llama-quantize.exe', 'sd-cli.exe'):
+                            item = re.search(r'\[\s*(\d+)\s*/\s*(\d+)\]', cleaned) or re.search(r'\|\s*(\d+)\s*/\s*(\d+)\s*-', cleaned)
+                            if item and int(item[2]) > 0:
+                                self.stage('Квантование тензоров', int(item[1]), int(item[2]))
             code = child.wait()
         except BaseException:
             if child.poll() is None:
@@ -525,10 +543,14 @@ class Conversion:
                 writer.write_header_to_file()
                 writer.write_kv_data_to_file()
                 writer.write_ti_data_to_file()
+                written = 0
+                self.stage('Запись GGUF', 0, size)
                 for data, _ in chosen.values():
                     if self.cancelled:
                         raise InterruptedError('Конвертация отменена.')
                     writer.write_tensor_data(data, tensor_endianess=base.endianess)
+                    written += data.nbytes
+                    self.stage('Запись GGUF', written, size)
             finally:
                 writer.close()
             _, actual_types = read_gguf(stage)
@@ -541,9 +563,15 @@ class Conversion:
         self.log(f'Готово: {output}\nТензоры: {dict(counts)}. Весовой объём: {8*size/elements:.3f} бит/параметр.')
         return output
 
-    def convert(self, source, output=None, mode='auto', threads=None, quantization='Q8_0', gpu='auto', cpu='auto'):
+    def convert(self, source, output=None, mode='auto', threads=None, quantization='Q8_0', gpu=None, cpu=None):
         if quantization not in QUANTIZATIONS:
             raise ValueError(f'Неизвестный формат GGUF {quantization}.')
+        self.stage('Чтение модели')
+        if quantization in GSQ_RCO:
+            gpu, cpu = gpu or 'auto', cpu or 'auto'
+        elif gpu is None or cpu is None:
+            card = hardware.detect(HARDWARE_HELPER)
+            gpu, cpu = gpu or card.gpu_target, cpu or card.cpu_target
         quantization = output_quantization(quantization, gpu, cpu)
         source = Path(os.path.abspath(USER_DIRECTORY / Path(source).expanduser()))
         if not source.exists():
@@ -599,6 +627,7 @@ class Conversion:
             else:
                 self.run(PYTHON, '-I', '-B', '-X', 'utf8', HERE / 'moss_convert.py',
                          source, stage, mode.removeprefix('moss-'), quantization)
+            self.stage('Проверка результата')
             _, types = read_gguf(stage)
             counts = Counter(types.values())
             raw_weights = any(name.endswith('.weight') and kind.startswith('I') for name, kind in types.items())
@@ -623,13 +652,17 @@ class Conversion:
         encode = native_quantizer(kind)
         replacements = {}
         with ExitStack() as maps, ThreadPoolExecutor(max_workers=threads) as pool:
+            total = len(reader.tensors)
+            self.stage('Квантование тензоров', 0, total)
             for i, tensor in enumerate(reader.tensors):
                 if self.cancelled:
                     raise InterruptedError('Конвертация отменена.')
                 if len(tensor.shape) != 2 or not tensor.name.endswith('.weight') or tensor.tensor_type == kind:
+                    self.stage('Квантование тензоров', i + 1, total)
                     continue
                 width, rows = map(int, tensor.shape)
                 if width % block:
+                    self.stage('Квантование тензоров', i + 1, total)
                     continue
                 data = np.memmap(output.parent / f'encoded-{i}.bin', mode='w+', dtype=np.uint8,
                                  shape=(rows, width // block * block_bytes))
@@ -645,6 +678,7 @@ class Conversion:
                 for _ in pool.map(chunk, range(0, rows, batch)):
                     pass
                 replacements[tensor.name] = data, kind
+                self.stage('Квантование тензоров', i + 1, total)
             return self.write_mixed_gguf(reader, output, replacements)
 
 
@@ -680,14 +714,33 @@ def native_quantizer(kind):
     return quantize
 
 
+def installed_capture_profile(source):
+    for name in ('photo-normal','photo-quality','video'):
+        path = USER_DIRECTORY / 'profiles' / f'{name}.kcpps'
+        try:
+            config = json.loads(path.read_text(encoding='utf-8-sig'))
+            for key in ('sdmodel', 'sdclip1', 'sdclip2', 'sdllm'):
+                value = config.get(key)
+                if isinstance(value, str) and value and (USER_DIRECTORY / value).resolve() == source.resolve():
+                    return path, key
+        except (OSError, ValueError, AttributeError):
+            pass
+    return None, 'sdmodel'
+
+
 def automatic_gsq_plan(source, tier, prompt, profile):
     reader = open_gguf(source)
     _, _, role = route(source, 'auto')
-    if role not in ('Фото', 'Видео', 'Диффузионная модель'):
-        raise ValueError('Для автозаписи нужен GGUF диффузора. Для энкодера или LLM доступны манифесты.')
+    inferred, part = installed_capture_profile(source)
+    if profile is None:
+        profile = inferred
+    if role == 'Текстовый энкодер' and profile:
+        part = part if part != 'sdmodel' else 'sdclip1'
+    elif role not in ('Фото', 'Видео', 'Диффузионная модель'):
+        raise ValueError('Для автозаписи нужен GGUF диффузора или энкодер с профилем .kcpps.')
     # ponytail: start with two attention projections; use a manifest to choose other matrices.
     choices = [t for t in reader.tensors if len(t.shape) == 2 and int(t.shape[0]) % 256 == 0
-               and re.search(r'(?:self_attn\.[qkv]|proj\.qkv|proj\.o|attn[12]\.to_[qkv]|attn_qkv|q_proj|qkv)\.weight$', t.name)]
+               and re.search(r'(?:self_attn\.[qkv]|proj\.qkv|proj\.o|attn[12]\.to_[qkv]|attn_qkv|q_proj|qkv|in_proj_z)\.weight$', t.name)]
     if not choices:
         raise ValueError('Проекции для автозаписи не определены. Укажите тензоры в манифесте GSQ/RCO.')
     choices = choices[:2]
@@ -695,7 +748,7 @@ def automatic_gsq_plan(source, tier, prompt, profile):
     qtype = kind.GGMLQuantizationType[FORMATS[f'Q{tier}']]
     block, size = kind.GGML_QUANT_SIZES[qtype]
     budget = sum(t.n_bytes for t in reader.tensors) + sum(t.n_elements // block * size - t.n_bytes for t in choices)
-    capture = {'prompt': prompt}
+    capture = {'prompt': prompt, 'base_part': part}
     if profile:
         parent = profile.parent
         capture.update(profile=str(profile), profile_root=str(parent.parent if parent.name == 'profiles' else parent))
@@ -710,18 +763,20 @@ def gui(source=''):
 
     window = tk.Tk()
     window.title('Конвертер GGUF')
-    window.geometry('800x480')
+    window.geometry('900x530')
     window.minsize(600, 360)
     window.columnconfigure(1, weight=1)
-    window.rowconfigure(7, weight=1)
+    window.rowconfigure(9, weight=1)
     input_value = tk.StringVar(value=source)
     output_value = tk.StringVar()
     kind_value = tk.StringVar(value='Автоматически')
     quantization_value = tk.StringVar(value='Q8')
     optimize_value = tk.BooleanVar(value=False)
-    gpu_value = tk.StringVar(value=GPU_TARGETS['auto'])
-    cpu_value = tk.StringVar(value=CPU_TARGETS['auto'])
     format_value = tk.StringVar()
+    hardware_value = tk.StringVar(value='Определение оборудования…')
+    advice_value = tk.StringVar()
+    progress_value = tk.StringVar(value='Готово к запуску')
+    card = None
     guessed = ''
     events = queue.Queue()
     job = None
@@ -732,19 +787,15 @@ def gui(source=''):
         return 'GSQ-RCO-' + value if optimize_value.get() else value
 
     def targets():
-        if optimize_value.get():
+        if optimize_value.get() or card is None:
             return 'auto', 'auto'
-        gpu = next(k for k, label in GPU_TARGETS.items() if label == gpu_value.get())
-        cpu = next(k for k, label in CPU_TARGETS.items() if label == cpu_value.get())
-        return gpu, cpu
+        return card.gpu_target, card.cpu_target
 
     def refresh(*_):
         nonlocal guessed
-        state = 'disabled' if optimize_value.get() else 'readonly'
-        gpu_box.config(state=state)
-        cpu_box.config(state=state)
         resolved = output_quantization(selection(), *targets())
         format_value.set(resolved)
+        advice_value.set('')
         value = input_value.get().strip().strip('"')
         path = USER_DIRECTORY / Path(value).expanduser()
         if not value or not path.exists():
@@ -757,10 +808,68 @@ def gui(source=''):
                 kind_value.set(route(path, 'auto')[2])
             except (ValueError, OSError, KeyError, RuntimeError):
                 kind_value.set('Требуется проверка файла')
+        update_estimate(path)
         suggested = str(suggested_output(path, resolved))
         if not output_value.get() or output_value.get() == guessed:
             output_value.set(suggested)
         guessed = suggested
+
+    def update_estimate(path):
+        try:
+            role = kind_value.get()
+            if optimize_value.get():
+                tier = quantization_value.get()[-1]
+                if path.suffix.lower() == '.json':
+                    plan = json.loads(path.read_text(encoding='utf-8-sig'))
+                elif path.suffix.lower() == '.gguf':
+                    plan = automatic_gsq_plan(path, int(tier), '', None)
+                else:
+                    return
+                limit = plan.get('targets', {}).get(tier, {}).get('max_tensor_bytes')
+                if type(limit) is int and limit > 0:
+                    advice_value.set(f'GSQ/RCO · бюджет тензоров до {limit / hardware.GIB:.2f} GiB')
+                return
+            constants = gguf_module('constants')
+            layouts = {tier: constants.GGML_QUANT_SIZES[constants.GGMLQuantizationType[output_quantization(tier, *targets())]]
+                       for tier in FORMATS}
+            geometry = None
+            if path.suffix.lower() == '.gguf' and not SHARD.fullmatch(path.name):
+                reader = open_gguf(path)
+                field = reader.get_field('split.count')
+                if field and field.contents() > 1:
+                    return
+                sizes = hardware.gguf_sizes(reader, layouts)
+                geometry = hardware.kv_geometry(reader)
+            elif path.suffix.lower() in SAFETENSORS:
+                sizes = hardware.safetensor_sizes(safe_header(path)[0], layouts)
+            else:
+                sizes = {}
+            tier = quantization_value.get()
+            if tier not in sizes:
+                advice_value.set('Размер станет известен после разбора упаковки')
+                return
+            estimate = f'Размер ≈ {sizes[tier] / hardware.GIB:.2f} GiB'
+            if card is None:
+                advice_value.set(estimate)
+                return
+            if role == 'Текстовый энкодер':
+                profile, _ = installed_capture_profile(path)
+                if profile and json.loads(profile.read_text(encoding='utf-8-sig')).get('sdclipdevice') in (-2, 'cpu', 'CPU'):
+                    advice_value.set(estimate + ' · энкодер на CPU в текущем профиле')
+                    return
+            llm = role == 'Текстовая модель'
+            suggested, context = hardware.advice(sizes, card, llm=llm, geometry=geometry)
+            if suggested:
+                estimate += f' · по VRAM с запасом {suggested}'
+                if context:
+                    estimate += f', до {context:,} токенов с KV F16'
+                elif not llm:
+                    estimate += ' для этого файла'
+            elif card.vram_bytes and (not llm or geometry):
+                estimate += ' · с запасом потребуется RAM'
+            advice_value.set(estimate)
+        except (KeyError, ValueError, OSError, RuntimeError, AttributeError, TypeError):
+            advice_value.set('Размер станет известен при конвертации')
 
     def select_input(folder=False):
         value = filedialog.askdirectory(initialdir=USER_DIRECTORY) if folder else filedialog.askopenfilename(initialdir=USER_DIRECTORY,
@@ -787,15 +896,23 @@ def gui(source=''):
             return
         quantization = selection()
         gpu, cpu = targets()
+        if optimize_value.get():
+            if Path(source).suffix.lower() != '.json' and (card is None or not card.gsq):
+                messagebox.showerror('GSQ/RCO', 'Автокалибровке нужен поддерживаемый Vulkan GPU. Обычная конвертация доступна.')
+                return
         automatic = optimize_value.get() and Path(source).suffix.lower() == '.gguf'
         prompt = None
         profile = None
         if automatic:
+            if 'AVX2' not in card.instructions:
+                messagebox.showerror('GSQ/RCO', 'Встроенный сбор активаций использует AVX2. Для готовых активаций откройте манифест.')
+                return
             prompt = simpledialog.askstring('GSQ/RCO', 'Промпт для калибровки', parent=window,
                                             initialvalue='A red flower by a window, soft natural light.')
             if not prompt:
                 return
-            if messagebox.askyesno('GSQ/RCO', 'Подключить энкодер, VAE и другие веса из профиля .kcpps?', parent=window):
+            profile, _ = installed_capture_profile((USER_DIRECTORY / Path(source).expanduser()).resolve())
+            if profile is None and messagebox.askyesno('GSQ/RCO', 'Подключить недостающие веса из профиля .kcpps?', parent=window):
                 path = filedialog.askopenfilename(parent=window, initialdir=USER_DIRECTORY,
                                                   filetypes=[('Профиль KoboldCpp', '*.kcpps')])
                 if not path:
@@ -804,11 +921,13 @@ def gui(source=''):
         elif optimize_value.get() and Path(source).suffix.lower() != '.json':
             messagebox.showerror('GSQ/RCO', 'Для калибровки выберите GGUF или JSON-манифест.')
             return
-        job = Conversion(lambda line: events.put(('log', line)))
+        job = Conversion(lambda line: events.put(('log', line)),
+                         lambda label, done, total: events.put(('progress', (label, done, total))))
         start_button.config(state='disabled')
         cancel_button.config(state='normal')
 
         def work():
+            success = False
             try:
                 if automatic:
                     original = (USER_DIRECTORY / Path(source).expanduser()).resolve(strict=True)
@@ -819,27 +938,55 @@ def gui(source=''):
                         job.convert(plan, output or suggested_output(original, quantization), quantization=quantization)
                 else:
                     job.convert(source, output, quantization=quantization, gpu=gpu, cpu=cpu)
+                success = True
             except Exception as exc:
                 events.put(('log', f'Ошибка: {exc}'))
             finally:
-                events.put(('done', ''))
+                events.put(('done', success))
 
         threading.Thread(target=work).start()
 
     def poll():
-        nonlocal job
+        nonlocal job, card
         for _ in range(150):
             try:
                 kind, value = events.get_nowait()
             except queue.Empty:
                 break
             if kind == 'done':
+                cancelled = job.cancelled
                 job = None
                 if closing:
                     window.destroy()
                     return
                 start_button.config(state='normal')
                 cancel_button.config(state='disabled')
+                bar.stop()
+                bar.configure(mode='determinate', maximum=100, value=100 if value else 0)
+                progress_value.set('Готово · 100%' if value else 'Отменено' if cancelled else 'Ошибка · см. журнал')
+            elif kind == 'hardware':
+                card = value
+                cpu = ', '.join(card.instructions) or 'базовые инструкции CPU'
+                gpu = card.gpu or 'GPU не обнаружен'
+                if card.vram_bytes:
+                    gpu += f' · {card.vram_bytes / hardware.GIB:.1f} GiB VRAM'
+                if card.budget_bytes is not None:
+                    gpu += f' · бюджет Vulkan {card.budget_bytes / hardware.GIB:.1f} GiB'
+                hardware_value.set(cpu + ' · ' + gpu)
+                start_button.config(state='normal')
+                refresh()
+            elif kind == 'progress':
+                label, done, total = value
+                if total:
+                    bar.stop()
+                    pct = min(100, int(done * 100 / total))
+                    bar.configure(mode='determinate', maximum=100, value=pct)
+                    progress_value.set(f'{label} · {pct}%')
+                else:
+                    if str(bar.cget('mode')) != 'indeterminate':
+                        bar.configure(mode='indeterminate', value=0)
+                        bar.start(12)
+                    progress_value.set(label)
             else:
                 console.insert('end', value + '\n')
                 console.see('end')
@@ -870,32 +1017,24 @@ def gui(source=''):
     format_box.grid(row=3, column=1, sticky='w', padx=4)
     format_box.bind('<<ComboboxSelected>>', refresh)
     ttk.Label(window, textvariable=format_value).grid(row=2, column=2, columnspan=2, sticky='w', padx=4)
-    ttk.Checkbutton(window, text='GSQ/RCO (Vulkan)', variable=optimize_value, command=refresh).grid(row=3, column=2, columnspan=2, sticky='w', padx=4)
-    for row, label, var, choices in ((4, 'Цель GPU', gpu_value, GPU_TARGETS), (5, 'Цель CPU', cpu_value, CPU_TARGETS)):
-        ttk.Label(window, text=label).grid(row=row, column=0, sticky='w', padx=8)
-        control = ttk.Combobox(window, textvariable=var, values=list(choices.values()), state='readonly')
-        control.grid(row=row, column=1, sticky='ew', padx=4)
-        if row == 4:
-            gpu_box = control
-        else:
-            cpu_box = control
-
-    def select_gpu(event):
-        if targets()[0] == 'cuda':
-            quantization_value.set('Q8')
-        refresh(event)
-    gpu_box.bind('<<ComboboxSelected>>', select_gpu)
-    cpu_box.bind('<<ComboboxSelected>>', refresh)
-    start_button = ttk.Button(window, text='Конвертировать', command=start)
+    ttk.Checkbutton(window, text='Калибровка GSQ/RCO', variable=optimize_value, command=refresh).grid(row=3, column=2, columnspan=2, sticky='w', padx=4)
+    ttk.Label(window, text='Оборудование').grid(row=4, column=0, sticky='w', padx=8)
+    ttk.Label(window, textvariable=hardware_value, wraplength=660).grid(row=4, column=1, columnspan=3, sticky='w', padx=4, pady=3)
+    ttk.Label(window, textvariable=advice_value, wraplength=660).grid(row=5, column=1, columnspan=3, sticky='w', padx=4, pady=3)
+    start_button = ttk.Button(window, text='Конвертировать', command=start, state='disabled')
     start_button.grid(row=6, column=1, sticky='w', padx=4, pady=8)
     cancel_button = ttk.Button(window, text='Отмена', state='disabled', command=lambda: job.cancel())
     cancel_button.grid(row=6, column=2, columnspan=2, sticky='ew', padx=4)
+    ttk.Label(window, textvariable=progress_value).grid(row=7, column=0, columnspan=4, sticky='w', padx=8)
+    bar = ttk.Progressbar(window, mode='determinate', maximum=100)
+    bar.grid(row=8, column=0, columnspan=4, sticky='ew', padx=8, pady=(2, 6))
     console = ScrolledText(window, wrap='word')
-    console.grid(row=7, column=0, columnspan=4, sticky='nsew', padx=8, pady=(0, 8))
+    console.grid(row=9, column=0, columnspan=4, sticky='nsew', padx=8, pady=(0, 8))
     window.protocol('WM_DELETE_WINDOW', close)
     if source and Path(source).suffix.lower() == '.json':
         optimize_value.set(True)
     refresh()
+    threading.Thread(target=lambda: events.put(('hardware', hardware.detect(HARDWARE_HELPER))), daemon=True).start()
     poll()
     window.mainloop()
 
@@ -905,8 +1044,8 @@ if __name__ == '__main__':
     parser.add_argument('source', nargs='?')
     parser.add_argument('-o', '--output')
     parser.add_argument('--mode', choices=MODES, default='auto')
-    parser.add_argument('--gpu', choices=GPU_TARGETS, default='auto')
-    parser.add_argument('--cpu', choices=CPU_TARGETS, default='auto')
+    parser.add_argument('--gpu', choices=GPU_TARGETS)
+    parser.add_argument('--cpu', choices=CPU_TARGETS)
     parser.add_argument('-t', '--threads', type=int)
     parser.add_argument('-q', '--quantization', type=str.upper, choices=QUANTIZATIONS, default='Q8_0')
     parser.add_argument('--gui', action='store_true')
