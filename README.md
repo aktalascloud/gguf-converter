@@ -51,6 +51,8 @@ CLI ACTCAL tiers are Q2, Q3, Q4, Q5, Q6 and Q8. Use `gguf-activation-calibration
 
 For YuE2, the converter detects the music GGUF and looks for a matching KoboldCpp music profile. A manifest can set `capture.base_part` to `musicllm` and provide `musicvae` in `capture.models`. `capture.prompt` is the musical style, and `capture.lyrics` optionally supplies training lyrics. The capture worker records Vulkan inputs to AR and NAR matrix products. Lookup tables and tensors unused by the calibration request keep their original bytes.
 
+The RX 580 trials covered 168 UMT5 projections and 395 YuE2 matrices. The stock and calibrated generation time ranges overlapped in the fixed-profile repetitions. The recorded visual and vocal content checks are included with the timings. [UMT5 and YuE2 measurements](benchmarks/2026-11-17-umt5-yue2-rx580.json)
+
 ## GSQ-RCO assembly
 
 Select **GSQ-RCO-Q2**, **GSQ-RCO-Q3** or **GSQ-RCO-Q4** and open a JSON manifest. The converter copies packed tensors from previously GSQ-optimized GGUF variants according to a per-tensor RCO assignment. Run GSQ calibration and the RCO search separately. The bundled EXE handles the assembly offline. [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO)

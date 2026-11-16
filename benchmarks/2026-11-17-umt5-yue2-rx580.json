@@ -1,0 +1,481 @@
+{
+  "date": "2026-11-17",
+  "hardware": "Radeon RX 580 2048SP 8 GiB + Xeon E5-2696 v3",
+  "converter": {
+    "sha256": "7234634057d1e3fb993a93253f7ff93af54a888e09104a28ce42e60be2a95613",
+    "bytes": 233470464,
+    "gui": true,
+    "weighted_calibration": [
+      {
+        "layout": "Q2_K",
+        "bytes": 2848,
+        "recovered_initial_scale_bytes": true,
+        "sha256": "0064d4652409657bf04121208c149d4abe893a911b74abbe36d7b72544ff3ae7"
+      },
+      {
+        "layout": "Q3_K",
+        "bytes": 3680,
+        "recovered_initial_scale_bytes": true,
+        "sha256": "d5c4a54058a57ad1dc0ce6ec2df53ffb0fe4f3f2ac3d8407155da4063b677519"
+      },
+      {
+        "layout": "Q4_K",
+        "bytes": 4768,
+        "recovered_initial_scale_bytes": true,
+        "sha256": "1e1b7ccb3dd4ea272e91285f848f9d52e2c24339a157576c4f60854f3129fba0"
+      },
+      {
+        "layout": "Q5_K",
+        "bytes": 5792,
+        "recovered_initial_scale_bytes": true,
+        "sha256": "33c595840c1cf67c21ef8c7d9b88c87693a45d74c4d466c757dbc8af9474433c"
+      },
+      {
+        "layout": "Q6_K",
+        "bytes": 6880,
+        "recovered_initial_scale_bytes": true,
+        "sha256": "a575f3dc17e506d61e3c43ffe5d41cedc200232b67613bf51df3c4960d368709"
+      }
+    ]
+  },
+  "coverage": {
+    "umt5": {
+      "eligible": 169,
+      "captured": 168,
+      "captured_bytes": 2786328576,
+      "eligible_bytes": 3647778816,
+      "missing": [
+        "token_embd.weight"
+      ],
+      "stock_sha256": "17cf97a5bbbc60a646d6105b832b6f657ce904a8a1ad970e4b59df0c67584a40",
+      "worker_sha256": "dd70323985387ed562aa1d2179c6b332cd4612e2dc5f93efd20e7713b17b89b9"
+    },
+    "yue2": {
+      "eligible": 395,
+      "captured": 395,
+      "captured_bytes": 3396927488,
+      "eligible_bytes": 3396927488,
+      "missing": [],
+      "stock_sha256": "52be345b5155bf9ef0b2411e7df8d1d2b8e13b6d977a2f70c35612ec69b1f591",
+      "worker_sha256": "dd70323985387ed562aa1d2179c6b332cd4612e2dc5f93efd20e7713b17b89b9"
+    }
+  },
+  "trials": {
+    "umt5": {
+      "reference_source": "https://huggingface.co/city96/umt5-xxl-encoder-gguf/blob/b535255bee98c2b0a59ea7c0ae2dcd0c6657b3b7/umt5-xxl-encoder-F16.gguf",
+      "calibration": {
+        "stock_sha256": "17cf97a5bbbc60a646d6105b832b6f657ce904a8a1ad970e4b59df0c67584a40",
+        "reference_sha256": "fa1d36fd54f171ae60fea915c23bd77986b330bbed9729f0d2f8ecbe9168bc48",
+        "layout_preserved": true,
+        "tensor_types": {
+          "Q4_K": 144,
+          "F32": 73,
+          "Q6_K": 25
+        },
+        "steps": 1,
+        "method": "ACTCAL superblock scales",
+        "eligible": 168,
+        "observed": 168,
+        "changed": 168,
+        "unobserved": [],
+        "calibration_seconds": 1137.9587383999606,
+        "bytes": 3655145312,
+        "candidate_sha256": "87029a8ebb6e67f0456ba16570da516847c7b3fab4b6261c96d6b20e70948d5c",
+        "projection_error_reduction": 0.20421649086216864
+      },
+      "render": {
+        "native_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+        "profile_sha256": "bf15115402c68882d29b308c6c92b02e4efdf95265731d9368bb2c7beeadb2f8",
+        "stock_sha256": "17cf97a5bbbc60a646d6105b832b6f657ce904a8a1ad970e4b59df0c67584a40",
+        "candidate_sha256": "87029a8ebb6e67f0456ba16570da516847c7b3fab4b6261c96d6b20e70948d5c",
+        "seed": 847631,
+        "runs": [
+          {
+            "seconds": 95.23500000004424,
+            "encode_seconds": 0.768508400011342,
+            "avi": {
+              "microseconds_per_frame": 41666,
+              "frames": 5,
+              "width": 832,
+              "height": 480,
+              "codec": "MJPG",
+              "scale": 1,
+              "rate": 24,
+              "fps": 24.0
+            },
+            "avi_sha256": "22f0832dadb39fe53f75ab9ec904590396588f32e4d67eceaeedad7e5293c4e3",
+            "quality_vs_first_stock": [
+              {
+                "psnr_db": null,
+                "pixels_equal": true,
+                "ssim": 1.0
+              },
+              {
+                "psnr_db": null,
+                "pixels_equal": true,
+                "ssim": 1.0
+              },
+              {
+                "psnr_db": null,
+                "pixels_equal": true,
+                "ssim": 1.0
+              },
+              {
+                "psnr_db": null,
+                "pixels_equal": true,
+                "ssim": 1.0
+              },
+              {
+                "psnr_db": null,
+                "pixels_equal": true,
+                "ssim": 1.0
+              }
+            ],
+            "arm": "stock",
+            "load_seconds": [
+              14.064298300014343
+            ]
+          },
+          {
+            "seconds": 95.01600000000326,
+            "encode_seconds": 0.13184909999836236,
+            "avi": {
+              "microseconds_per_frame": 41666,
+              "frames": 5,
+              "width": 832,
+              "height": 480,
+              "codec": "MJPG",
+              "scale": 1,
+              "rate": 24,
+              "fps": 24.0
+            },
+            "avi_sha256": "ebb82434ec39453ce64de08d66be6f97a6a47f3fd2a0f80150c15e94b03138d0",
+            "quality_vs_first_stock": [
+              {
+                "psnr_db": 23.410323749764444,
+                "pixels_equal": false,
+                "ssim": 0.6564819812774658
+              },
+              {
+                "psnr_db": 23.97259863141571,
+                "pixels_equal": false,
+                "ssim": 0.6385317444801331
+              },
+              {
+                "psnr_db": 24.938766743840905,
+                "pixels_equal": false,
+                "ssim": 0.6643106341362
+              },
+              {
+                "psnr_db": 26.062649808387444,
+                "pixels_equal": false,
+                "ssim": 0.6869555711746216
+              },
+              {
+                "psnr_db": 27.408165252978698,
+                "pixels_equal": false,
+                "ssim": 0.8332759141921997
+              }
+            ],
+            "arm": "calibrated",
+            "load_seconds": [
+              10.030496100021992
+            ]
+          },
+          {
+            "seconds": 94.93700000003446,
+            "encode_seconds": 0.12845999997807667,
+            "avi": {
+              "microseconds_per_frame": 41666,
+              "frames": 5,
+              "width": 832,
+              "height": 480,
+              "codec": "MJPG",
+              "scale": 1,
+              "rate": 24,
+              "fps": 24.0
+            },
+            "avi_sha256": "ebb82434ec39453ce64de08d66be6f97a6a47f3fd2a0f80150c15e94b03138d0",
+            "quality_vs_first_stock": [
+              {
+                "psnr_db": 23.410323749764444,
+                "pixels_equal": false,
+                "ssim": 0.6564819812774658
+              },
+              {
+                "psnr_db": 23.97259863141571,
+                "pixels_equal": false,
+                "ssim": 0.6385317444801331
+              },
+              {
+                "psnr_db": 24.938766743840905,
+                "pixels_equal": false,
+                "ssim": 0.6643106341362
+              },
+              {
+                "psnr_db": 26.062649808387444,
+                "pixels_equal": false,
+                "ssim": 0.6869555711746216
+              },
+              {
+                "psnr_db": 27.408165252978698,
+                "pixels_equal": false,
+                "ssim": 0.8332759141921997
+              }
+            ],
+            "arm": "calibrated",
+            "load_seconds": [
+              10.046382199972868
+            ]
+          },
+          {
+            "seconds": 95.0,
+            "encode_seconds": 0.13040890003321692,
+            "avi": {
+              "microseconds_per_frame": 41666,
+              "frames": 5,
+              "width": 832,
+              "height": 480,
+              "codec": "MJPG",
+              "scale": 1,
+              "rate": 24,
+              "fps": 24.0
+            },
+            "avi_sha256": "22f0832dadb39fe53f75ab9ec904590396588f32e4d67eceaeedad7e5293c4e3",
+            "quality_vs_first_stock": [
+              {
+                "psnr_db": null,
+                "pixels_equal": true,
+                "ssim": 1.0
+              },
+              {
+                "psnr_db": null,
+                "pixels_equal": true,
+                "ssim": 1.0
+              },
+              {
+                "psnr_db": null,
+                "pixels_equal": true,
+                "ssim": 1.0
+              },
+              {
+                "psnr_db": null,
+                "pixels_equal": true,
+                "ssim": 1.0
+              },
+              {
+                "psnr_db": null,
+                "pixels_equal": true,
+                "ssim": 1.0
+              }
+            ],
+            "arm": "stock",
+            "load_seconds": [
+              10.038786599994637
+            ]
+          }
+        ],
+        "median_seconds": {
+          "calibrated": 94.97650000001886,
+          "stock": 95.11750000002212
+        }
+      }
+    },
+    "yue2": {
+      "reference_source": "https://huggingface.co/audio-cpp/Yue2-3B-GGUF/blob/cca74d8980c00f30ab8d52248a367c01ad633ec2/yue2-3b-bf16.gguf",
+      "calibration": {
+        "stock_sha256": "52be345b5155bf9ef0b2411e7df8d1d2b8e13b6d977a2f70c35612ec69b1f591",
+        "reference_sha256": "4cf3fdffbaaed2d8e30a3122ac7cd27d0c96f8921805f173da9758c685b3c7d6",
+        "layout_preserved": true,
+        "tensor_types": {
+          "F16": 6,
+          "BF16": 227,
+          "Q8_0": 395
+        },
+        "steps": 1,
+        "method": "ACTCAL Q8_0 codes and scales",
+        "eligible": 395,
+        "observed": 395,
+        "changed": 395,
+        "unobserved": [],
+        "calibration_seconds": 714.4020847000065,
+        "bytes": 4264195616,
+        "candidate_sha256": "188d244639ce86503902469239cdd264b2c685b6a31fd5e4fd1bffea04eb1db5",
+        "projection_error_reduction": 0.4513675413339615
+      },
+      "render": {
+        "native_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+        "profile_sha256": "89b27cb9fcf0783ace14ef3004a8558f04f68ec643aa52e2d65eaa8aba5ec33e",
+        "stock_sha256": "52be345b5155bf9ef0b2411e7df8d1d2b8e13b6d977a2f70c35612ec69b1f591",
+        "candidate_sha256": "188d244639ce86503902469239cdd264b2c685b6a31fd5e4fd1bffea04eb1db5",
+        "seed": 847631,
+        "runs": [
+          {
+            "seconds": 31.636014499992598,
+            "mp3_sha256": "791fd3eecfbf401a80d7e93a470f9886ebada5ae470b76bdcf8be2d028274645",
+            "pcm_sha256": "bdb700d1064431d66d60883a9485aac65864463e0f04e9282750a453758d8309",
+            "duration_seconds": 24.0,
+            "rms": 0.13153651356697083,
+            "peak": 0.9521484375,
+            "clipped_fraction": 0.0,
+            "quiet_window_fraction": 0.0033333333333333335,
+            "arm": "stock",
+            "load_seconds": [
+              9.028647200029809
+            ]
+          },
+          {
+            "seconds": 31.075628600025084,
+            "mp3_sha256": "5e10b909d55e5aeed66b0c86589bb03baab45e47e98aa3cdbb258a1e89e06a5a",
+            "pcm_sha256": "9aa9683b5298bf5ea9f307b6269c7fe3abc4de8fc2946ecbf8380e5c53ff0832",
+            "duration_seconds": 24.0,
+            "rms": 0.15837790071964264,
+            "peak": 1.0,
+            "clipped_fraction": 3.306878306878307e-06,
+            "quiet_window_fraction": 0.008333333333333333,
+            "arm": "calibrated",
+            "load_seconds": [
+              8.021408899978269
+            ]
+          },
+          {
+            "seconds": 31.054642700008117,
+            "mp3_sha256": "5e10b909d55e5aeed66b0c86589bb03baab45e47e98aa3cdbb258a1e89e06a5a",
+            "pcm_sha256": "9aa9683b5298bf5ea9f307b6269c7fe3abc4de8fc2946ecbf8380e5c53ff0832",
+            "duration_seconds": 24.0,
+            "rms": 0.15837790071964264,
+            "peak": 1.0,
+            "clipped_fraction": 3.306878306878307e-06,
+            "quiet_window_fraction": 0.008333333333333333,
+            "arm": "calibrated",
+            "load_seconds": [
+              8.528269899950828
+            ]
+          },
+          {
+            "seconds": 30.952845000021625,
+            "mp3_sha256": "791fd3eecfbf401a80d7e93a470f9886ebada5ae470b76bdcf8be2d028274645",
+            "pcm_sha256": "bdb700d1064431d66d60883a9485aac65864463e0f04e9282750a453758d8309",
+            "duration_seconds": 24.0,
+            "rms": 0.13153651356697083,
+            "peak": 0.9521484375,
+            "clipped_fraction": 0.0,
+            "quiet_window_fraction": 0.0033333333333333335,
+            "arm": "stock",
+            "load_seconds": [
+              12.031933499965817
+            ]
+          }
+        ],
+        "median_seconds": {
+          "calibrated": 31.0651356500166,
+          "stock": 31.29442975000711
+        }
+      }
+    }
+  },
+  "yue2_content": {
+    "whisper_sha256": "c77c5766f1cef09b6b7d47f21b546cbddd4157886b3b5d6d4f709e91e66c7c2b",
+    "runs": [
+      {
+        "arm": "stock",
+        "song_sha256": "791fd3eecfbf401a80d7e93a470f9886ebada5ae470b76bdcf8be2d028274645",
+        "recognized_terms": [
+          "damn",
+          "fuck"
+        ]
+      },
+      {
+        "arm": "calibrated",
+        "song_sha256": "5e10b909d55e5aeed66b0c86589bb03baab45e47e98aa3cdbb258a1e89e06a5a",
+        "recognized_terms": [
+          "damn",
+          "fuck"
+        ]
+      },
+      {
+        "arm": "calibrated",
+        "song_sha256": "5e10b909d55e5aeed66b0c86589bb03baab45e47e98aa3cdbb258a1e89e06a5a",
+        "recognized_terms": [
+          "damn",
+          "fuck"
+        ]
+      },
+      {
+        "arm": "stock",
+        "song_sha256": "791fd3eecfbf401a80d7e93a470f9886ebada5ae470b76bdcf8be2d028274645",
+        "recognized_terms": [
+          "damn",
+          "fuck"
+        ]
+      }
+    ]
+  },
+  "umt5_content": {
+    "scenario": "Nonsexual charcoal figure study of an adult, rendered by Wan with the video profile",
+    "reviewed": [
+      {
+        "trial": "umt5-0-stock",
+        "frame": 0,
+        "shows_requested_nudity": true,
+        "censor_overlay_seen": false
+      },
+      {
+        "trial": "umt5-1-calibrated",
+        "frame": 0,
+        "shows_requested_nudity": true,
+        "censor_overlay_seen": false
+      }
+    ],
+    "visual_observation": "The figure pose and shading changed with calibration. Both frames retain the requested artistic subject."
+  },
+  "selection": {
+    "umt5": {
+      "adopted": false,
+      "reason": "Stock and calibrated generation times overlap across the fixed-profile repetitions.",
+      "stock_seconds": [
+        95.23500000004424,
+        95.0
+      ],
+      "calibrated_seconds": [
+        95.01600000000326,
+        94.93700000003446
+      ],
+      "median_change_pct": -0.14823770599861064,
+      "ranges_overlap": true,
+      "candidate_mean_ssim": 0.695911169052124
+    },
+    "yue2": {
+      "adopted": false,
+      "reason": "Stock and calibrated generation times overlap across the fixed-profile repetitions.",
+      "stock_seconds": [
+        31.636014499992598,
+        30.952845000021625
+      ],
+      "calibrated_seconds": [
+        31.075628600025084,
+        31.054642700008117
+      ],
+      "median_change_pct": -0.732699403127679,
+      "ranges_overlap": true,
+      "waveform_summary": {
+        "stock": {
+          "duration_seconds": 24.0,
+          "rms": 0.13153651356697083,
+          "peak": 0.9521484375,
+          "clipped_fraction": 0.0,
+          "quiet_window_fraction": 0.0033333333333333335
+        },
+        "calibrated": {
+          "duration_seconds": 24.0,
+          "rms": 0.15837790071964264,
+          "peak": 1.0,
+          "clipped_fraction": 3.306878306878307e-06,
+          "quiet_window_fraction": 0.008333333333333333
+        }
+      },
+      "identical_pcm_across_arms": false
+    }
+  },
+  "scope": "Four fixed-profile stock/candidate trials per model. The UMT5 test measures Native Wan generation. The YuE2 test measures a 24-second Vulkan music request. Projection selection error uses the recorded calibration activations."
+}
