@@ -1,0 +1,339 @@
+{
+  "date": "2026-11-16",
+  "hardware": "Windows x64, AMD Radeon RX 580 8 GB, Vulkan",
+  "converter": {
+    "sha256": "ab6acfee14152597202678570e3b1653f09b5f0338ed98926a52f6e8a49b0f92",
+    "bytes": 232242688,
+    "gui": true,
+    "isolated_paths": true,
+    "quantization_cases": [
+      {
+        "tier": "Q4",
+        "gpu": "vulkan",
+        "cpu": "avx",
+        "format": "Q4_0",
+        "output_bytes": 2464
+      },
+      {
+        "tier": "Q4",
+        "gpu": "pascal",
+        "cpu": "avx2",
+        "format": "Q4_0",
+        "output_bytes": 2464
+      }
+    ],
+    "separate_pc_tested": false
+  },
+  "preflight": {
+    "sha256": "886cda933dddfb4f1f0fa1700b85665f2b8b166494f4020a26003a77373dd94f",
+    "bytes": 232243200,
+    "gui": true,
+    "isolated_paths": true,
+    "quantization_cases": [
+      {
+        "tier": "Q2",
+        "gpu": "auto",
+        "cpu": "auto",
+        "format": "Q2_K",
+        "output_bytes": 1504
+      },
+      {
+        "tier": "Q4",
+        "gpu": "auto",
+        "cpu": "auto",
+        "format": "Q4_K",
+        "output_bytes": 2464
+      },
+      {
+        "tier": "Q6",
+        "gpu": "auto",
+        "cpu": "auto",
+        "format": "Q6_K",
+        "output_bytes": 3520
+      },
+      {
+        "tier": "Q8",
+        "gpu": "cuda",
+        "cpu": "avx2",
+        "format": "Q8_0",
+        "output_bytes": 4512
+      },
+      {
+        "tier": "Q4",
+        "gpu": "vulkan",
+        "cpu": "avx",
+        "format": "Q4_0",
+        "output_bytes": 2464
+      },
+      {
+        "tier": "Q4",
+        "gpu": "pascal",
+        "cpu": "avx2",
+        "format": "Q4_0",
+        "output_bytes": 2464
+      }
+    ],
+    "separate_pc_tested": false
+  },
+  "capture_runtime_sha256": "21d73435ea2ad98796b7f941afbd95783ce57acf04389e0c916181ceedd86cf9",
+  "standard_size_plan": [
+    {
+      "model": "photo",
+      "reference_bytes": 5401115648,
+      "planned_bytes": {
+        "Q2": 1669366752,
+        "Q4": 2860350432,
+        "Q6": 4170432480,
+        "Q8": 5401115616
+      }
+    },
+    {
+      "model": "text",
+      "reference_bytes": 10400747200,
+      "planned_bytes": {
+        "Q2": 3796623040,
+        "Q4": 5904322240,
+        "Q6": 8222791360,
+        "Q8": 10400747200
+      }
+    },
+    {
+      "model": "video",
+      "reference_bytes": 3033897696,
+      "planned_bytes": {
+        "Q2": 1651605184,
+        "Q4": 2822728384,
+        "Q6": 4110963904,
+        "Q8": 5321124544
+      }
+    }
+  ],
+  "files_written": [
+    {
+      "model": "photo",
+      "bits": 2,
+      "bytes": 1669366752,
+      "source_bytes": 5401115648,
+      "source_sha256": "92e2a40e6752c83da3526ec6f2da1653bed433cabde48627792a568eac0f008f",
+      "sha256": "462e06f2c9f993e181682256f838bca1e923d8a732131e766d921be04ad84836",
+      "seconds": 603.407
+    }
+  ],
+  "full_render_selection": [
+    {
+      "model": "photo",
+      "tier": 8,
+      "file_type": "Q4_K",
+      "candidates_render_mse": [
+        0.019344913,
+        0.29360818,
+        0.017518873
+      ],
+      "converter_seconds": 452.01500000001397,
+      "baseline_sha256": "92e2a40e6752c83da3526ec6f2da1653bed433cabde48627792a568eac0f008f",
+      "output_sha256": "cdc777d5eadde2618819f624d0458a1b36c7c75daea740aeb36105d783497ed9",
+      "output_bytes": 5396397024,
+      "tensor_byte_budget": 5401083904
+    },
+    {
+      "model": "video",
+      "tier": 4,
+      "file_type": "Q4_K",
+      "full_render_search_completed": true,
+      "candidates_render_mse": null,
+      "detail": "The final result exists. Candidate scores were lost when the production startup readiness check timed out.",
+      "output_sha256": "fbcebe6240a688747a47025a00031e56306b30f7827b4d6ce836d7118afb158a",
+      "output_bytes": 3033897664,
+      "tensor_byte_budget": 3033846528,
+      "baseline_sha256": "8aa3a98c254bd02a9cc7e4f1db37720fe291cef8b0c32fb78e7a2391125d6b28"
+    }
+  ],
+  "renders": [
+    {
+      "kind": "photo",
+      "case": "auto-q8",
+      "models": {
+        "photo": 8
+      },
+      "seed": 847631,
+      "executable_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "repeats": [
+        {
+          "seconds": 135.60899999999674,
+          "native_seconds": 125.102,
+          "size": [
+            736,
+            1104
+          ],
+          "raw_sha256": "8ba6d6f486ddb117f858c90b974725563b9d4187d68f1d1f85d977d01060066f",
+          "final_sha256": "74962422e4446daedb7e9fc5f4982061b6445706dacf943719c2ec0ad078f665"
+        }
+      ],
+      "load_seconds": [
+        14.550377100007609
+      ],
+      "profile_sha256": "939a5c5668ca9dbe0c0979f43731b1f6aa0be918bc30e9c383131f7ceea5fb3e",
+      "quality_vs_reference": {
+        "raw": {
+          "psnr_db": 24.255390677715894,
+          "pixels_equal": false,
+          "ssim": 0.87315434217453
+        },
+        "final": {
+          "psnr_db": 23.923277081035714,
+          "pixels_equal": false
+        }
+      },
+      "wall_time_change_percent": -0.01179723502544583
+    },
+    {
+      "kind": "photo",
+      "case": "reference",
+      "models": {},
+      "seed": 847631,
+      "executable_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "repeats": [
+        {
+          "seconds": 135.625,
+          "native_seconds": 123.2,
+          "size": [
+            736,
+            1104
+          ],
+          "raw_sha256": "aacfe6b47122f3eb4302f6ba59f21679739c82156a64c09b73a0ec974a60d746",
+          "final_sha256": "057a36b84272a2c0d47a3f91c085dcb4df4fedb8722ba4556127562067b3f10d"
+        }
+      ],
+      "load_seconds": [
+        87.66493610001635
+      ],
+      "profile_sha256": "843293d4413b02e0f4585c7dc46d3857c6289abc26b2de9e95d7946416c928fd"
+    },
+    {
+      "kind": "photo",
+      "case": "standard-q2",
+      "models": {
+        "photo": 2
+      },
+      "seed": 847631,
+      "executable_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "repeats": [
+        {
+          "seconds": 138.84399999998277,
+          "native_seconds": 134.124,
+          "size": [
+            736,
+            1104
+          ],
+          "raw_sha256": "35a0c31f5543fdca6f7c228973f58b9e46617f6e56e70f7ac58e5621aafb9922",
+          "final_sha256": "cf1b3f889b75a7ed4957b71f005ce8dcf6b051a16babb4f6ff9fe4adc352f267"
+        }
+      ],
+      "load_seconds": [
+        13.531620599969756
+      ],
+      "profile_sha256": "ae9b1c216503f4b5e9669603686e099176066ba85610bbcd641b1f99186d50b1",
+      "quality_vs_reference": {
+        "raw": {
+          "psnr_db": 5.223649578143988,
+          "pixels_equal": false,
+          "ssim": 0.1655600666999817
+        },
+        "final": {
+          "psnr_db": 5.185178259104526,
+          "pixels_equal": false
+        }
+      },
+      "wall_time_change_percent": 2.373456221185455
+    },
+    {
+      "kind": "video",
+      "case": "auto-q4",
+      "models": {
+        "video": 4
+      },
+      "seed": 847631,
+      "executable_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "repeats": [
+        {
+          "seconds": 97.79699999996228,
+          "encode_seconds": 0.36620039999252185,
+          "avi": {
+            "microseconds_per_frame": 41666,
+            "frames": 5,
+            "width": 832,
+            "height": 480,
+            "codec": "MJPG",
+            "scale": 1,
+            "rate": 24,
+            "fps": 24.0
+          },
+          "avi_sha256": "36c674945c39e73489f2bf563c80d249678c90bc67a468697781185d0c2c1252"
+        }
+      ],
+      "load_seconds": [
+        18.06358190003084
+      ],
+      "profile_sha256": "2b5c9d3f697e86a173940432fc01572cffbcf9d00bd5e581def8ab0fd4c7c3fa",
+      "quality_vs_reference": [
+        {
+          "psnr_db": 46.923764529186656,
+          "pixels_equal": false,
+          "ssim": 0.9924398064613342
+        },
+        {
+          "psnr_db": 46.790091704536735,
+          "pixels_equal": false,
+          "ssim": 0.9920415282249451
+        },
+        {
+          "psnr_db": 46.91574185306692,
+          "pixels_equal": false,
+          "ssim": 0.9918473958969116
+        },
+        {
+          "psnr_db": 47.25960731665864,
+          "pixels_equal": false,
+          "ssim": 0.9917698502540588
+        },
+        {
+          "psnr_db": 48.83372388142605,
+          "pixels_equal": false,
+          "ssim": 0.9931304454803467
+        }
+      ],
+      "wall_time_change_percent": 1.3272410791568046
+    },
+    {
+      "kind": "video",
+      "case": "reference",
+      "models": {},
+      "seed": 847631,
+      "executable_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "repeats": [
+        {
+          "seconds": 96.51600000000326,
+          "encode_seconds": 0.8358875999692827,
+          "avi": {
+            "microseconds_per_frame": 41666,
+            "frames": 5,
+            "width": 832,
+            "height": 480,
+            "codec": "MJPG",
+            "scale": 1,
+            "rate": 24,
+            "fps": 24.0
+          },
+          "avi_sha256": "d99705e080cd1a834ed894e132b50ecff05a3095a6ea948ced93da3c5581ab16"
+        }
+      ],
+      "load_seconds": [
+        15.050345499999821
+      ],
+      "profile_sha256": "bf15115402c68882d29b308c6c92b02e4efdf95265731d9368bb2c7beeadb2f8"
+    }
+  ],
+  "size_scope": "Exact serialized bytes from tensor geometry, metadata and padding. Files actually written are recorded separately.",
+  "capture_scope": "One selected matrix on each real model. Vulkan GSQ creates candidate weights. Budgeted RCO proposes a bounded list. Complete PNG or five MJPEG-frame MSE selects among the proposals and rounding.",
+  "runtime_scope": "Independent held-out fixtures. Photo normal without upscale. Native video 480p short clip at 24 FPS. Single runs per arm, model load recorded separately. SSIM measures similarity to the same-seed reference."
+}
