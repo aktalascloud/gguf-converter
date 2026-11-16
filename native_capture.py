@@ -19,7 +19,7 @@ import numpy as np
 
 
 BACKEND = Path(__file__).resolve().parent / 'capture-runtime'
-FILE_KEYS = ('sdmodel', 'sdclip1', 'sdclip2', 'sdllm', 'sdvae')
+FILE_KEYS = ('sdmodel', 'sdclip1', 'sdclip2', 'sdllm', 'sdvae', 'musicllm', 'musicvae')
 PROFILE_OPTIONS = ('sdthreads', 'sdclipdevice', 'sdvaedevice', 'sdmaingpu', 'sdflashattention',
                    'sdconvdirect', 'sdoffloadcpu', 'sdvramlimit', 'sdvaetiled', 'sdvaeauto', 'sdtiledvae',
                    'sdclamped', 'sdclampedsoft', 'sdloramult')
@@ -36,14 +36,16 @@ def runtime_config(recipe, manifest, reference):
         path = (root / profile).resolve(strict=True)
         defaults = json.loads(path.read_text(encoding='utf-8-sig'))
         root = (root / recipe.get('profile_root', str(path.parent))).resolve(strict=True)
-    settings = {key: defaults[key] for key in PROFILE_OPTIONS if key in defaults}
     overrides = recipe.get('models', {})
     if not isinstance(overrides, dict) or overrides.keys() - set(FILE_KEYS):
-        raise ValueError('capture.models принимает sdmodel, sdclip1, sdclip2, sdllm и sdvae.')
+        raise ValueError('Неизвестное поле модели в capture.models.')
     part = recipe.get('base_part', 'sdmodel')
-    if part not in FILE_KEYS:
+    if part not in (*FILE_KEYS[:5], 'musicllm'):
         raise ValueError('Укажите, какую часть медиамодели заменяет исходный GGUF.')
-    for key in FILE_KEYS:
+    music = part == 'musicllm'
+    keys = ('threads','blasthreads','musiclowvram') if music else PROFILE_OPTIONS
+    settings = {key: defaults[key] for key in keys if key in defaults}
+    for key in FILE_KEYS[5:] if music else FILE_KEYS[:5]:
         value = overrides.get(key, defaults.get(key))
         if key == part:
             value = str(reference)
@@ -52,7 +54,7 @@ def runtime_config(recipe, manifest, reference):
             if not resolved.is_file():
                 raise ValueError(f'{key} должен указывать на файл весов.')
             settings[key] = str(resolved)
-    loras = defaults.get('sdlora') or []
+    loras = [] if music else defaults.get('sdlora') or []
     if not isinstance(loras, list) or not all(isinstance(path, str) for path in loras):
         raise ValueError('В профиле sdlora должен быть списком локальных файлов.')
     if loras:
@@ -60,7 +62,9 @@ def runtime_config(recipe, manifest, reference):
         if not all(item.is_file() for item in paths):
             raise ValueError('LoRA из профиля должна указывать на файл весов.')
         settings['sdlora'] = [str(item) for item in paths]
-    if 'sdmodel' not in settings:
+    if music and 'musicvae' not in settings:
+        raise ValueError('Для автозаписи YuE2 нужен musicvae в профиле или capture.models.')
+    if not music and 'sdmodel' not in settings:
         raise ValueError('Автозапись для энкодера требует диффузор sdmodel.')
     validate_name = recipe.get('prompt')
     if not isinstance(validate_name, str) or not 0 < len(validate_name.strip()) <= 2400:
@@ -98,16 +102,19 @@ def worker(converter, settings, directory, activations):
     env = {key: value for key, value in os.environ.items()
            if not key.startswith(('KCPP_', 'GGML_', 'CUDA_', 'HIP_', 'ROCR_'))}
     env.update(PYTHONUNBUFFERED='1', TEMP=str(directory), TMP=str(directory))
+    music = 'musicllm' in settings
     if activations:
         env['KCPP_GGUF_ACTIVATIONS'] = '.'
+        if music:
+            env['KCPP_GGUF_CAPTURE_MUSIC'] = '1'
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
-    def request(path, payload=None, timeout=300):
+    def request(path, payload=None, timeout=300, *, audio=False):
         req = urllib.request.Request(f'http://127.0.0.1:{port}' + path,
                                      None if payload is None else json.dumps(payload).encode(),
                                      {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + password})
         with opener.open(req, timeout=timeout) as response:
-            return json.load(response)
+            return response.read() if audio else json.load(response)
 
     with (directory / TMP_LOG).open('wb') as log:
         with converter.lock:
@@ -121,13 +128,14 @@ def worker(converter, settings, directory, activations):
             while time.monotonic() < deadline and process.poll() is None:
                 try:
                     version = request('/api/extra/version', timeout=2)
-                    if version.get('txt2img') and process.poll() is None:
+                    if version.get('musicllm' if music else 'txt2img') and process.poll() is None:
                         break
                 except (OSError, ValueError):
                     pass
                 time.sleep(.4)
             else:
-                tail = (directory / TMP_LOG).read_bytes()[-2400:].decode('utf-8', errors='replace')
+                lines=(directory / TMP_LOG).read_text(encoding='utf-8',errors='replace').splitlines()
+                tail='\n'.join(line for line in lines[-50:] if len(line)<=400)[-2400:]
                 raise RuntimeError(f'Не удалось запустить Vulkan для автозаписи.\n{tail}')
             yield request
         finally:
@@ -139,16 +147,40 @@ def worker(converter, settings, directory, activations):
 
 
 def collect(converter, manifest, reference, recipe, names, directory, detect, *, require_all=True):
-    if len(names) > 4096 or any(re.fullmatch(r'[A-Za-z0-9_.-]{1,200}', name) is None for name in names):
+    if len(names) > 4096 or any(re.fullmatch(r'[A-Za-z0-9_./-]{1,200}', name) is None for name in names):
         raise ValueError('Имена выбранных тензоров несовместимы с автозаписью.')
-    (directory / 'tensors.txt').write_text('\n'.join(names) + '\n', encoding='ascii')
-    settings, _, prompt, seed = runtime_config(recipe, manifest, reference)
-    payload = render_spec(settings, prompt, seed, detect)
+    settings, part, prompt, seed = runtime_config(recipe, manifest, reference)
+    music = part == 'musicllm'
+    t5 = {'attn_q':'layer.0.SelfAttention.q','attn_k':'layer.0.SelfAttention.k',
+          'attn_v':'layer.0.SelfAttention.v','attn_o':'layer.0.SelfAttention.o',
+          'ffn_up':'layer.1.DenseReluDense.wi_1','ffn_down':'layer.1.DenseReluDense.wo',
+          'ffn_gate':'layer.1.DenseReluDense.wi_0'}
+    aliases=[]
+    for name in names:
+        match=re.fullmatch(r'enc\.blk\.(\d+)\.(\w+)\.weight',name)
+        if match and match[2] in t5:
+            name=f'encoder.block.{match[1]}.{t5[match[2]]}.weight'
+        aliases.append(name)
+    (directory / 'tensors.txt').write_text('\n'.join(aliases) + '\n', encoding='ascii')
+    if music:
+        lyrics = recipe.get('lyrics','[Verse]\nEvening light falls on the river\nThe town is quiet as the sun goes down')
+        if not isinstance(lyrics,str) or len(lyrics) > 2400:
+            raise ValueError('Укажите текст песни до 2400 знаков в capture.lyrics.')
+        payload = dict(style=prompt, lyrics=lyrics, seed=seed, cot='off',
+                       semantic_min_tokens=128, semantic_max_tokens=128, num_inference_steps=8,
+                       guidance_scale=1.01, use_mp3=False, stereo=False)
+    else:
+        payload = render_spec(settings, prompt, seed, detect)
     converter.log('Собираю активации на Vulkan.')
     with worker(converter, settings, directory, activations=True) as request:
-        result = request('/sdapi/v1/txt2img', payload)
-        if not result.get('images') and not (result.get('animated') and result.get('extra_data')):
-            raise RuntimeError('Vulkan не вернул результат калибровочного прогона.')
+        if music:
+            data = request('/api/extra/music/generate', payload, timeout=540, audio=True)
+            if len(data) <= 44 or data[:4] != b'RIFF' or data[8:12] != b'WAVE':
+                raise RuntimeError('YuE2 не вернул WAV для калибровочного прогона.')
+        else:
+            result = request('/sdapi/v1/txt2img', payload)
+            if not result.get('images') and not (result.get('animated') and result.get('extra_data')):
+                raise RuntimeError('Vulkan не вернул результат калибровочного прогона.')
     captured = {}
     for i, name in enumerate(names):
         path = directory / f'{i}.f32'

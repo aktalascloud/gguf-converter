@@ -1,0 +1,176 @@
+diff --git a/activation_calibration.py b/activation_calibration.py
+index 85a9223..00985ce 100644
+--- a/activation_calibration.py
++++ b/activation_calibration.py
+@@ -1,4 +1,4 @@
+-"""Activation-weighted Vulkan calibration of every observed Q4_0/Q8_0 matrix."""
++"""Activation-weighted Vulkan calibration with fixed GGUF layouts."""
+ from contextlib import ExitStack
+ from pathlib import Path
+ import tempfile
+@@ -6,7 +6,10 @@ import tempfile
+ import numpy as np
+ 
+ 
+-LAYOUTS = {'Q4_0': (4, 18), 'Q8_0': (8, 34)}
++LAYOUTS = {'Q4_0': (4, 18), 'Q8_0': (8, 34), 'Q2_K': (2, 84), 'Q3_K': (3, 110),
++           'Q4_K': (4, 144), 'Q5_K': (5, 176), 'Q6_K': (6, 210)}
++K_SCALES = {'Q2_K': (80, 82), 'Q3_K': (108,), 'Q4_K': (0, 2),
++            'Q5_K': (0, 2), 'Q6_K': (208,)}
+ PREFIXES = ('model.diffusion_model.', 'diffusion_model.')
+ FLOATS = {'F32', 'F16', 'BF16', 'F8_E4M3', 'F8_E5M2'}
+ 
+@@ -90,6 +93,30 @@ def solve(converter, root, helper, weights, importance, old, bits, steps):
+     return np.concatenate((scale.reshape(-1,1).view(np.uint8),encoded[:,1:].copy().view(np.uint8)),axis=1)
+ 
+ 
++def solve_k(converter, root, helper, weights, importance, old, kind, decode):
++    """Fit the FP16 superblock scales to the existing K-quants and subscale codes."""
++    offsets = K_SCALES[kind.name]
++    basis = old.copy()
++    data, result = root/'input.bin', root/'output.bin'
++    with data.open('wb') as f:
++        weights.astype('<f4',copy=False).tofile(f)
++        for unit in offsets:
++            for offset in offsets:
++                basis[:,offset:offset+2] = (0,60 if offset==unit else 0)  # FP16 1.0 or 0.0
++            decode(basis,kind).astype('<f4',copy=False).tofile(f)
++        importance.astype('<f4',copy=False).tofile(f)
++    converter.run(helper,'actcal-k',data,result,helper.with_name('actcal_k.spv'),
++                  len(old),1,len(importance)//256,len(offsets),0,0,1)
++    scale=np.fromfile(result,dtype='<f4')
++    if scale.size!=len(old)*len(offsets) or not np.isfinite(scale).all():
++        raise RuntimeError('Некорректные масштабы Vulkan для K-кванта.')
++    packed=old.copy()
++    encoded=np.clip(scale.reshape(-1,len(offsets)),-65504,65504).astype('<f2')
++    for i,offset in enumerate(offsets):
++        packed[:,offset:offset+2] = encoded[:,i].copy().view(np.uint8).reshape(-1,2)
++    return packed
++
++
+ def optimize_full(converter, manifest, base, reference, target, output, gguf_module, *, capture, detect,
+                   evidence=None, binaries=None):
+     if base.endianess.name!='LITTLE':
+@@ -105,9 +132,10 @@ def optimize_full(converter, manifest, base, reference, target, output, gguf_mod
+     if specs and set(specs)-weights.keys():
+         raise ValueError('В манифесте есть неизвестные тензоры.')
+     entries=[t for t in base.tensors if (all_weights or t.name in specs)
+-             and t.tensor_type.name in LAYOUTS and len(t.shape)==2 and int(t.shape[0])%32==0]
++             and t.tensor_type.name in LAYOUTS and len(t.shape)==2
++             and int(t.shape[0]) % (256 if t.tensor_type.name in K_SCALES else 32) == 0]
+     if not entries or not all_weights and len(entries)!=len(specs):
+-        raise ValueError('Нужны матрицы Q4_0/Q8_0, у которых ширина кратна 32.')
++        raise ValueError('Нужны матрицы Q4_0/Q8_0 или Q2_K–Q6_K с подходящей шириной блока.')
+     helper=(binaries or Path(__file__).resolve().parent/'vulkan')/'vulkan-gsq.exe'
+     decode=gguf_module('quants').dequantize
+     with tempfile.TemporaryDirectory(prefix='.gguf-full-cal-',dir=output.parent) as temp, ExitStack() as maps:
+@@ -154,7 +182,10 @@ def optimize_full(converter, manifest, base, reference, target, output, gguf_mod
+                 reference_values=np.ascontiguousarray(ref(t,part),dtype=np.float32)
+                 n=len(reference_values)
+                 old=t.data[part].reshape(-1,packed_bytes)
+-                packed=solve(converter,root,helper,reference_values,importance,old,bits,steps)
++                if t.tensor_type.name in K_SCALES:
++                    packed=solve_k(converter,root,helper,reference_values,importance,old,t.tensor_type,decode)
++                else:
++                    packed=solve(converter,root,helper,reference_values,importance,old,bits,steps)
+                 expected=reference_values @ holdout
+                 old_loss=((decode(old,t.tensor_type).reshape(n,width) @ holdout-expected)**2).sum(axis=1)
+                 new_loss=((decode(packed,t.tensor_type).reshape(n,width) @ holdout-expected)**2).sum(axis=1)
+diff --git a/vulkan/actcal_k.comp b/vulkan/actcal_k.comp
+new file mode 100644
+index 0000000..8a343b1
+--- /dev/null
++++ b/vulkan/actcal_k.comp
+@@ -0,0 +1,50 @@
++#version 450
++layout(local_size_x=64) in;
++layout(binding=0,std430) readonly buffer Inputs { float source[]; };
++layout(binding=1,std430) writeonly buffer Output { float scale[]; };
++layout(push_constant) uniform Config {
++    uint blocks;
++    uint steps;
++    uint columns_blocks;
++    uint components;
++    uint seed;
++    float target;
++} pc;
++
++void main() {
++    uint block=gl_GlobalInvocationID.x;
++    if (block>=pc.blocks) return;
++    uint stride=pc.blocks*256u;
++    uint pos=block*256u;
++    uint channel=(pc.components+1u)*stride+(block%pc.columns_blocks)*256u;
++    float aa=0.0, ab=0.0, bb=0.0, aw=0.0, bw=0.0;
++    for (uint i=0u; i<256u; ++i) {
++        float a=source[stride+pos+i];
++        float b=pc.components==2u ? source[2u*stride+pos+i] : 0.0;
++        float w=source[pos+i], weight=source[channel+i];
++        aa+=weight*a*a; ab+=weight*a*b; bb+=weight*b*b;
++        aw+=weight*a*w; bw+=weight*b*w;
++    }
++    float d=aa>0.0 ? aw/aa : 0.0;
++    if (pc.components==1u) {
++        scale[block]=d;
++        return;
++    }
++    float m=bb>0.0 ? bw/bb : 0.0;
++    float det=aa*bb-ab*ab;
++    if (det>1e-6*(aa*bb)) {
++        float fit_d=(aw*bb-bw*ab)/det;
++        float fit_m=(bw*aa-aw*ab)/det;
++        if (fit_d>=0.0 && fit_m>=0.0) {
++            scale[2u*block]=fit_d;
++            scale[2u*block+1u]=fit_m;
++            return;
++        }
++    }
++    // Constrained optimum on one of the nonnegative axes.
++    d=max(d,0.0); m=max(m,0.0);
++    if (d*aw>=m*bw) m=0.0;
++    else d=0.0;
++    scale[2u*block]=d;
++    scale[2u*block+1u]=m;
++}
+diff --git a/vulkan/vulkan-gsq.cpp b/vulkan/vulkan-gsq.cpp
+index 265f687..4602192 100644
+--- a/vulkan/vulkan-gsq.cpp
++++ b/vulkan/vulkan-gsq.cpp
+@@ -109,19 +109,23 @@ int wmain(int argc, wchar_t ** argv) try {
+     const bool rco=std::wcscmp(argv[1],L"rco")==0;
+     const bool loss=std::wcscmp(argv[1],L"loss")==0;
+     const bool actcal=std::wcscmp(argv[1],L"actcal")==0;
+-    if (!rco && !loss && !actcal && std::wcscmp(argv[1],L"gsq")!=0) throw std::runtime_error("unknown mode");
++    const bool actcal_k=std::wcscmp(argv[1],L"actcal-k")==0;
++    if (!rco && !loss && !actcal && !actcal_k && std::wcscmp(argv[1],L"gsq")!=0) throw std::runtime_error("unknown mode");
+     wchar_t * target_end=nullptr;
+     const float target=std::wcstof(argv[10],&target_end);
+     if (target_end==argv[10] || *target_end || !std::isfinite(target)) throw std::runtime_error("invalid target");
+-    const Parameters pc={integer(argv[5],actcal?262144:(rco?8:4096)),integer(argv[6],actcal?8:128),integer(argv[7],actcal?2048:32),
++    const Parameters pc={integer(argv[5],actcal?262144:(actcal_k?32768:(rco?8:4096))),integer(argv[6],actcal?8:128),integer(argv[7],actcal?2048:(actcal_k?256:32)),
+                          integer(argv[8],8),integer(argv[9],UINT32_MAX),target};
+     const unsigned repeats=integer(argv[11],16);
+     if (!pc.blocks || !pc.samples || (rco && ((pc.bits!=3 && pc.bits!=4) || pc.steps<2)) ||
+         (actcal && (pc.bits!=4 && pc.bits!=8)) ||
+-        (!rco && !loss && !actcal && pc.bits!=2 && pc.bits!=3 && pc.bits!=4 && pc.bits!=6 && pc.bits!=8) ||
++        (actcal_k && (pc.bits<1 || pc.bits>2 || pc.blocks%pc.samples!=0)) ||
++        (!rco && !loss && !actcal && !actcal_k && pc.bits!=2 && pc.bits!=3 && pc.bits!=4 && pc.bits!=6 && pc.bits!=8) ||
+         repeats==0) throw std::runtime_error("parameters outside the supported range");
+-    const size_t input_floats=actcal ? size_t(pc.blocks)*33+pc.samples*32 : (loss ? size_t(pc.blocks)*512 : size_t(pc.blocks)*(rco?pc.bits:256)*(1+pc.samples));
+-    const size_t output_floats=actcal ? size_t(pc.blocks)*(pc.bits==4?5:9) : (loss ? pc.blocks : (rco ? pc.blocks+4+pc.blocks*pc.bits : size_t(pc.blocks)*266));
++    const size_t input_floats=actcal_k ? (size_t(pc.blocks)*(pc.bits+1)+pc.samples)*256 :
++        (actcal ? size_t(pc.blocks)*33+pc.samples*32 : (loss ? size_t(pc.blocks)*512 : size_t(pc.blocks)*(rco?pc.bits:256)*(1+pc.samples)));
++    const size_t output_floats=actcal_k ? size_t(pc.blocks)*pc.bits :
++        (actcal ? size_t(pc.blocks)*(pc.bits==4?5:9) : (loss ? pc.blocks : (rco ? pc.blocks+4+pc.blocks*pc.bits : size_t(pc.blocks)*266)));
+     const vk::DeviceSize input_size=input_floats*sizeof(float),output_size=output_floats*sizeof(float);
+     std::ifstream input_file(std::filesystem::path(argv[2]),std::ios::binary|std::ios::ate);
+     if (!input_file || input_file.tellg()!=std::streamoff(input_size)) throw std::runtime_error("input size mismatch");
+@@ -222,7 +226,7 @@ int wmain(int argc, wchar_t ** argv) try {
+         cmd.bindPipeline(vk::PipelineBindPoint::eCompute,*pipeline);
+         cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute,*pl,0,set,{});
+         cmd.pushConstants(*pl,vk::ShaderStageFlagBits::eCompute,0,sizeof(pc),&pc);
+-        cmd.dispatch(actcal?(pc.blocks+63)/64:(rco?1:pc.blocks),1,1);
++        cmd.dispatch((actcal || actcal_k)?(pc.blocks+63)/64:(rco?1:pc.blocks),1,1);
+         cmd.writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe,*queries,1);
+         barrier(compute,transfer,vk::AccessFlagBits::eShaderWrite,vk::AccessFlagBits::eTransferRead);
+         cmd.copyBuffer(*b.buffer,*staged.buffer,vk::BufferCopy(0,0,output_size));

@@ -1,0 +1,157 @@
+diff --git a/NOTICE.md b/NOTICE.md
+index 33c174d..e1bd8c7 100644
+--- a/NOTICE.md
++++ b/NOTICE.md
+@@ -15,3 +15,5 @@ The Vulkan calibration and search helper implements ideas from the GSQ and RCO p
+ The optional embedded capture worker adapts the Vulkan build of KoboldCpp 1.125. Its corresponding source and build recipe are pinned below. Build that revision with Vulkan, then use `vulkan/build_capture.py` against the resulting checkout and compile log. The converter repository provides the additional activation callback and build script. The Pillow wheel decodes PNG and MJPEG frames for the Vulkan loss shader. Its license and bundled codec notices remain in the wheel. [Pinned KoboldCpp source and licenses](https://github.com/aktalascloud/koboldcpp-avx2-vulkan-numa/tree/e10c3a7f8a30d45760b1486874dd36ba664aa573) · [Pillow 13.0.0](https://pypi.org/project/pillow/13.0.0/)
+ 
+ The Windows DXGI fallback reuses the media toolkit's GPU enumeration code. [Corresponding GPU adapter source](https://github.com/aktalascloud/koboldcpp-media-pipeline/blob/05a5e5f3efc75c5d43603a695deb8b57921906f1/tools/GpuAdapter.py)
++
++Music activation capture ships the YuE2 tokenizer vocabulary from the same KoboldCpp revision. The model and VAE come from the user's profile. [Tokenizer resource](https://github.com/LostRuins/koboldcpp/blob/f5576d37c1c2fc0389dec1c9c367683be0fc9b4f/embd_res/yue2_qwen_tiktoken.embd)
+diff --git a/README.md b/README.md
+index c2ed6b9..e589816 100644
+--- a/README.md
++++ b/README.md
+@@ -45,9 +45,11 @@ The v1.3.0 RX 580 check covers automatic capture on ABDM and Wan, photo generati
+ 
+ ### Calibration with the original tensor layouts
+ 
+-For a model dominated by Q4_0 or Q8_0, enable weight calibration and select the existing tier. Provide the matching GGUF or Safetensors checkpoint. `ACTCAL-Q4` and `ACTCAL-Q8` use activation-weighted least squares on Vulkan. Each candidate matrix is measured on 8–32 captured rows split into fitting and selection sets. The converter keeps tensor types, model metadata, and payload size. Check output quality separately on independent prompts.
++Enable weight calibration, select the existing tier and provide the matching GGUF or Safetensors checkpoint. ACTCAL uses activation-weighted least squares on Vulkan. For Q4_0 and Q8_0 it fits codes and scales. For Q2_K through Q6_K it fits superblock scales with the existing packed codes and subscales. Candidate rows are selected by projection error on a separate subset of the recorded activations. Tensor types, model metadata and payload size are preserved.
+ 
+-For the CLI, use `-q ACTCAL-Q4` or `-q ACTCAL-Q8` with a `gguf-activation-calibration-v1` manifest. Set `base`, `reference` and `capture` the same way as for GSQ/RCO. Under `targets`, use `"4": {"all": true}` or `"8": {"all": true}` to capture and fit every reachable Q4_0 and Q8_0 matrix. Use `tensors` with names mapped to `.npy` or `null` for explicit selections. Safetensors inputs support common floating formats, scaled INT8, and W4A8 INT4 with its codebook and scales. Same-tier K-quant GSQ uses a GGUF reference and the `GSQ-RCO` modes.
++CLI ACTCAL tiers are Q2, Q3, Q4, Q5, Q6 and Q8. Use `gguf-activation-calibration-v1` with `base`, `reference`, and `capture`. For a mixed Q4_K_M encoder, set `"4": {"all": true}` under `targets` to preserve each matrix's Q4_K or Q6_K type. For explicit selection, set `tensors` to names mapped to `.npy` files or `null`. Safetensors references support common floating formats, scaled INT8 and W4A8 INT4 with scales and codebooks. The earlier GSQ/RCO workflow has its own manifest.
++
++For YuE2, the converter detects the music GGUF and looks for a matching KoboldCpp music profile. A manifest can set `capture.base_part` to `musicllm` and provide `musicvae` in `capture.models`. `capture.prompt` is the musical style, and `capture.lyrics` optionally supplies training lyrics. The capture worker records Vulkan inputs to AR and NAR matrix products. Lookup tables and tensors unused by the calibration request keep their original bytes.
+ 
+ ## GSQ-RCO assembly
+ 
+diff --git a/README.ru.md b/README.ru.md
+index accb156..e795a52 100644
+--- a/README.ru.md
++++ b/README.ru.md
+@@ -29,9 +29,11 @@ GPU, VRAM и инструкции CPU определяются для справ
+ 
+ ### Калибровка с сохранением кванта
+ 
+-Для модели с преобладающим Q4_0 или Q8_0 включите калибровку и выберите её текущий квант. Укажите GGUF или Safetensors того же чекпойнта. `ACTCAL-Q4` и `ACTCAL-Q8` подбирают коды и масштабы методом взвешенных наименьших квадратов на Vulkan. Для каждой матрицы 8–32 строки активаций делятся на наборы для подгонки и отбора. Типы, объём тензоров и метаданные сохраняются. Качество результата проверяется на независимых промптах.
++Включите калибровку, выберите текущий квант и укажите GGUF или Safetensors того же чекпойнта. ACTCAL использует взвешенные наименьшие квадраты на Vulkan. Для Q4_0 и Q8_0 подбираются коды и масштабы. Для Q2_K–Q6_K подбираются масштабы суперблоков с сохранением упакованных кодов и подмасштабов. Результат выбирается по ошибке проекций на отдельной части записанных активаций. Типы, объём тензоров и метаданные сохраняются.
+ 
+-Для CLI используйте `-q ACTCAL-Q4` или `-q ACTCAL-Q8` с манифестом `gguf-activation-calibration-v1`. В `targets` задайте `"4": {"all": true}` или `"8": {"all": true}` для автосбора по всем доступным матрицам Q4_0 и Q8_0. Поле `tensors` позволяет указать `.npy` или `null` по имени. Поддерживаются вещественные Safetensors, INT8 с масштабами и INT4 W4A8 с кодовой книгой и масштабами. GSQ с сохранением K-кванта использует исходник GGUF и режим `GSQ-RCO`.
++CLI принимает ACTCAL-Q2/Q3/Q4/Q5/Q6/Q8 и манифест `gguf-activation-calibration-v1`. Для смешанного Q4_K_M задайте `"4": {"all": true}` в `targets`. Каждая матрица сохраняет свой формат Q4_K или Q6_K. Поле `tensors` принимает `.npy` или `null` по имени. Поддерживаются вещественные Safetensors, INT8 с масштабами и INT4 W4A8 с кодовой книгой и масштабами. Для GSQ/RCO используется отдельный манифест.
++
++YuE2 определяется по GGUF. Конвертер ищет соответствующий профиль музыки. В манифесте можно указать `capture.base_part` со значением `musicllm` и `musicvae` в `capture.models`. `capture.prompt` задаёт стиль, `capture.lyrics` — текст песни по желанию. Записываются входы матричных умножений AR и NAR на Vulkan. Таблицы lookup и тензоры вне калибровочного прогона сохраняют исходные данные.
+ 
+ ## Сборка GSQ-RCO
+ 
+diff --git a/convert.py b/convert.py
+index e0b918b..d053153 100644
+--- a/convert.py
++++ b/convert.py
+@@ -40,7 +40,7 @@ GPU_TARGETS = {
+ }
+ CPU_TARGETS = {'auto': 'Универсальный GGUF', 'avx': 'AVX', 'avx2': 'AVX2'}
+ GSQ_RCO = ('GSQ-RCO-Q2', 'GSQ-RCO-Q3', 'GSQ-RCO-Q4', 'GSQ-RCO-Q6', 'GSQ-RCO-Q8')
+-ACTIVATION_FORMATS = ('ACTCAL-Q4', 'ACTCAL-Q8')
++ACTIVATION_FORMATS = ('ACTCAL-Q2', 'ACTCAL-Q3', 'ACTCAL-Q4', 'ACTCAL-Q5', 'ACTCAL-Q6', 'ACTCAL-Q8')
+ CALIBRATIONS = (*GSQ_RCO, *ACTIVATION_FORMATS)
+ QUANTIZATIONS = (*FORMATS, *FORMATS.values(), 'Q4_0', *CALIBRATIONS)
+ SAFETENSORS = {'.safetensors', '.sft'}
+@@ -224,6 +224,8 @@ def gguf_source(source, mode):
+     if fields.get('general.type') == 'adapter':
+         raise ValueError('Выберите веса полной модели. Этот GGUF содержит адаптер.')
+     arch = fields.get('general.architecture', '')
++    if mode == 'auto' and arch == 'audiocpp' and {'model_weights/lm_head.weight','model_weights/llm2vae.weight'} <= tensors.keys():
++        return source, 'encoder', 'YuE2 (музыка)'
+     label = media_role(arch, tensors)
+     if mode == 'auto':
+         media = bool(label) or any(n.startswith((
+@@ -452,7 +454,7 @@ class Conversion:
+         target = targets.get(str(bits)) if isinstance(targets, dict) else None
+         full = plan['format'] == 'gguf-activation-calibration-v1'
+         if activation != full:
+-            raise ValueError('Для манифеста сохранения Q4_0/Q8_0 выберите ACTCAL-Q4 или ACTCAL-Q8.')
++            raise ValueError('Для манифеста калибровки с сохранением типов выберите ACTCAL-Q нужного уровня.')
+         if not isinstance(target, dict) or (not (full and target.get('all') is True)
+                 and (not isinstance(target.get('tensors'), dict) or not target['tensors'])):
+             raise ValueError(f'В манифесте отсутствуют назначения тензоров для Q{bits}.')
+@@ -737,11 +739,11 @@ def native_quantizer(kind):
+ 
+ 
+ def installed_capture_profile(source):
+-    for name in ('photo-normal','photo-quality','video'):
++    for name in ('photo-normal','photo-quality','video','music'):
+         path = USER_DIRECTORY / 'profiles' / f'{name}.kcpps'
+         try:
+             config = json.loads(path.read_text(encoding='utf-8-sig'))
+-            for key in ('sdmodel', 'sdclip1', 'sdclip2', 'sdllm'):
++            for key in ('sdmodel', 'sdclip1', 'sdclip2', 'sdllm', 'musicllm'):
+                 value = config.get(key)
+                 if isinstance(value, str) and value and (USER_DIRECTORY / value).resolve() == source.resolve():
+                     return path, key
+@@ -751,7 +753,7 @@ def installed_capture_profile(source):
+ 
+ 
+ def dominant_quantization(path):
+-    families = {'Q2_K':2,'Q3_K':3,'Q4_K':4,'Q4_0':4,'Q6_K':6,'Q8_0':8}
++    families = {'Q2_K':2,'Q3_K':3,'Q4_K':4,'Q4_0':4,'Q5_K':5,'Q6_K':6,'Q8_0':8}
+     counts = Counter()
+     tiers = Counter()
+     for tensor in open_gguf(path).tensors:
+@@ -775,7 +777,9 @@ def automatic_gsq_plan(source, tier, prompt, profile, reference=None, *, activat
+     inferred, part = installed_capture_profile(source)
+     if profile is None:
+         profile = inferred
+-    if role == 'Текстовый энкодер' and profile:
++    if role == 'YuE2 (музыка)' and activation:
++        part = 'musicllm'
++    elif role == 'Текстовый энкодер' and profile:
+         part = part if part != 'sdmodel' else 'sdclip1'
+     elif role not in ('Фото', 'Видео', 'Диффузионная модель'):
+         raise ValueError('Для автозаписи нужен GGUF диффузора или энкодер с профилем .kcpps.')
+@@ -845,7 +849,7 @@ def gui(source=''):
+                 return 'ACTCAL-' + value
+             if item.suffix.lower() == '.gguf':
+                 layout, tier = dominant_quantization(item)
+-                if layout in ('Q4_0','Q8_0') and value == f'Q{tier}':
++                if layout and value == f'Q{tier}':
+                     return 'ACTCAL-' + value
+         except (OSError, ValueError, TypeError, KeyError, AttributeError):
+             pass
+@@ -983,8 +987,9 @@ def gui(source=''):
+                 if not chosen:
+                     return
+                 reference = Path(chosen).resolve(strict=True)
+-            prompt = simpledialog.askstring('GSQ/RCO', 'Промпт для калибровки', parent=window,
+-                                            initialvalue='A red flower by a window, soft natural light.')
++            music = kind_value.get() == 'YuE2 (музыка)'
++            prompt = simpledialog.askstring('Калибровка', 'Стиль музыки' if music else 'Промпт для калибровки', parent=window,
++                initialvalue='English folk song, clear vocal, acoustic guitar' if music else 'A red flower by a window, soft natural light.')
+             if not prompt:
+                 return
+             profile, _ = installed_capture_profile((USER_DIRECTORY / Path(source).expanduser()).resolve())
+diff --git a/portable_build.py b/portable_build.py
+index 3fdfb24..29ba3b2 100644
+--- a/portable_build.py
++++ b/portable_build.py
+@@ -112,7 +112,7 @@ def included(relative):
+ def build_vulkan(args, destination):
+     destination.mkdir()
+     source = HERE / 'vulkan'
+-    for mode in ('gsq', 'rco', 'loss', 'actcal'):
++    for mode in ('gsq', 'rco', 'loss', 'actcal', 'actcal_k'):
+         subprocess.run([str(args.glslc), '--target-env=vulkan1.1', '-O',
+                         str(source / f'{mode}.comp'), '-o', str(destination / f'{mode}.spv')], check=True)
+     subprocess.run([str(args.cxx), '-std=c++17', '-O2', '-municode', '-static', '-static-libgcc', '-static-libstdc++',
+@@ -162,8 +162,9 @@ def build(args):
+         if args.native_capture:
+             directory = app / 'capture-runtime'
+             directory.mkdir()
+-            for filename in ('koboldcpp.py', 'koboldcpp_vulkan.dll'):
+-                shutil.copyfile(args.native_capture / filename, directory / filename)
++            for rel in (Path('koboldcpp.py'), Path('koboldcpp_vulkan.dll'), Path('embd_res/yue2_qwen_tiktoken.embd')):
++                (directory / rel.parent).mkdir(parents=True,exist_ok=True)
++                shutil.copyfile(args.native_capture / rel, directory / rel)
+ 
+         payload = workspace / 'converter.zip'
+         with zipfile.ZipFile(payload, 'w', zipfile.ZIP_DEFLATED, compresslevel=3) as archive:

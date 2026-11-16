@@ -40,7 +40,7 @@ GPU_TARGETS = {
 }
 CPU_TARGETS = {'auto': 'Универсальный GGUF', 'avx': 'AVX', 'avx2': 'AVX2'}
 GSQ_RCO = ('GSQ-RCO-Q2', 'GSQ-RCO-Q3', 'GSQ-RCO-Q4', 'GSQ-RCO-Q6', 'GSQ-RCO-Q8')
-ACTIVATION_FORMATS = ('ACTCAL-Q4', 'ACTCAL-Q8')
+ACTIVATION_FORMATS = ('ACTCAL-Q2', 'ACTCAL-Q3', 'ACTCAL-Q4', 'ACTCAL-Q5', 'ACTCAL-Q6', 'ACTCAL-Q8')
 CALIBRATIONS = (*GSQ_RCO, *ACTIVATION_FORMATS)
 QUANTIZATIONS = (*FORMATS, *FORMATS.values(), 'Q4_0', *CALIBRATIONS)
 SAFETENSORS = {'.safetensors', '.sft'}
@@ -224,6 +224,8 @@ def gguf_source(source, mode):
     if fields.get('general.type') == 'adapter':
         raise ValueError('Выберите веса полной модели. Этот GGUF содержит адаптер.')
     arch = fields.get('general.architecture', '')
+    if mode == 'auto' and arch == 'audiocpp' and {'model_weights/lm_head.weight','model_weights/llm2vae.weight'} <= tensors.keys():
+        return source, 'encoder', 'YuE2 (музыка)'
     label = media_role(arch, tensors)
     if mode == 'auto':
         media = bool(label) or any(n.startswith((
@@ -452,7 +454,7 @@ class Conversion:
         target = targets.get(str(bits)) if isinstance(targets, dict) else None
         full = plan['format'] == 'gguf-activation-calibration-v1'
         if activation != full:
-            raise ValueError('Для манифеста сохранения Q4_0/Q8_0 выберите ACTCAL-Q4 или ACTCAL-Q8.')
+            raise ValueError('Для манифеста калибровки с сохранением типов выберите ACTCAL-Q нужного уровня.')
         if not isinstance(target, dict) or (not (full and target.get('all') is True)
                 and (not isinstance(target.get('tensors'), dict) or not target['tensors'])):
             raise ValueError(f'В манифесте отсутствуют назначения тензоров для Q{bits}.')
@@ -737,11 +739,11 @@ def native_quantizer(kind):
 
 
 def installed_capture_profile(source):
-    for name in ('photo-normal','photo-quality','video'):
+    for name in ('photo-normal','photo-quality','video','music'):
         path = USER_DIRECTORY / 'profiles' / f'{name}.kcpps'
         try:
             config = json.loads(path.read_text(encoding='utf-8-sig'))
-            for key in ('sdmodel', 'sdclip1', 'sdclip2', 'sdllm'):
+            for key in ('sdmodel', 'sdclip1', 'sdclip2', 'sdllm', 'musicllm'):
                 value = config.get(key)
                 if isinstance(value, str) and value and (USER_DIRECTORY / value).resolve() == source.resolve():
                     return path, key
@@ -751,7 +753,7 @@ def installed_capture_profile(source):
 
 
 def dominant_quantization(path):
-    families = {'Q2_K':2,'Q3_K':3,'Q4_K':4,'Q4_0':4,'Q6_K':6,'Q8_0':8}
+    families = {'Q2_K':2,'Q3_K':3,'Q4_K':4,'Q4_0':4,'Q5_K':5,'Q6_K':6,'Q8_0':8}
     counts = Counter()
     tiers = Counter()
     for tensor in open_gguf(path).tensors:
@@ -775,7 +777,9 @@ def automatic_gsq_plan(source, tier, prompt, profile, reference=None, *, activat
     inferred, part = installed_capture_profile(source)
     if profile is None:
         profile = inferred
-    if role == 'Текстовый энкодер' and profile:
+    if role == 'YuE2 (музыка)' and activation:
+        part = 'musicllm'
+    elif role == 'Текстовый энкодер' and profile:
         part = part if part != 'sdmodel' else 'sdclip1'
     elif role not in ('Фото', 'Видео', 'Диффузионная модель'):
         raise ValueError('Для автозаписи нужен GGUF диффузора или энкодер с профилем .kcpps.')
@@ -845,7 +849,7 @@ def gui(source=''):
                 return 'ACTCAL-' + value
             if item.suffix.lower() == '.gguf':
                 layout, tier = dominant_quantization(item)
-                if layout in ('Q4_0','Q8_0') and value == f'Q{tier}':
+                if layout and value == f'Q{tier}':
                     return 'ACTCAL-' + value
         except (OSError, ValueError, TypeError, KeyError, AttributeError):
             pass
@@ -983,8 +987,9 @@ def gui(source=''):
                 if not chosen:
                     return
                 reference = Path(chosen).resolve(strict=True)
-            prompt = simpledialog.askstring('GSQ/RCO', 'Промпт для калибровки', parent=window,
-                                            initialvalue='A red flower by a window, soft natural light.')
+            music = kind_value.get() == 'YuE2 (музыка)'
+            prompt = simpledialog.askstring('Калибровка', 'Стиль музыки' if music else 'Промпт для калибровки', parent=window,
+                initialvalue='English folk song, clear vocal, acoustic guitar' if music else 'A red flower by a window, soft natural light.')
             if not prompt:
                 return
             profile, _ = installed_capture_profile((USER_DIRECTORY / Path(source).expanduser()).resolve())

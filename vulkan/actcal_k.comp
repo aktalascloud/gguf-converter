@@ -1,0 +1,50 @@
+#version 450
+layout(local_size_x=64) in;
+layout(binding=0,std430) readonly buffer Inputs { float source[]; };
+layout(binding=1,std430) writeonly buffer Output { float scale[]; };
+layout(push_constant) uniform Config {
+    uint blocks;
+    uint steps;
+    uint columns_blocks;
+    uint components;
+    uint seed;
+    float target;
+} pc;
+
+void main() {
+    uint block=gl_GlobalInvocationID.x;
+    if (block>=pc.blocks) return;
+    uint stride=pc.blocks*256u;
+    uint pos=block*256u;
+    uint channel=(pc.components+1u)*stride+(block%pc.columns_blocks)*256u;
+    float aa=0.0, ab=0.0, bb=0.0, aw=0.0, bw=0.0;
+    for (uint i=0u; i<256u; ++i) {
+        float a=source[stride+pos+i];
+        float b=pc.components==2u ? source[2u*stride+pos+i] : 0.0;
+        float w=source[pos+i], weight=source[channel+i];
+        aa+=weight*a*a; ab+=weight*a*b; bb+=weight*b*b;
+        aw+=weight*a*w; bw+=weight*b*w;
+    }
+    float d=aa>0.0 ? aw/aa : 0.0;
+    if (pc.components==1u) {
+        scale[block]=d;
+        return;
+    }
+    float m=bb>0.0 ? bw/bb : 0.0;
+    float det=aa*bb-ab*ab;
+    if (det>1e-6*(aa*bb)) {
+        float fit_d=(aw*bb-bw*ab)/det;
+        float fit_m=(bw*aa-aw*ab)/det;
+        if (fit_d>=0.0 && fit_m>=0.0) {
+            scale[2u*block]=fit_d;
+            scale[2u*block+1u]=fit_m;
+            return;
+        }
+    }
+    // Constrained optimum on one of the nonnegative axes.
+    d=max(d,0.0); m=max(m,0.0);
+    if (d*aw>=m*bw) m=0.0;
+    else d=0.0;
+    scale[2u*block]=d;
+    scale[2u*block+1u]=m;
+}

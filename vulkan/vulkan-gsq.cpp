@@ -109,19 +109,23 @@ int wmain(int argc, wchar_t ** argv) try {
     const bool rco=std::wcscmp(argv[1],L"rco")==0;
     const bool loss=std::wcscmp(argv[1],L"loss")==0;
     const bool actcal=std::wcscmp(argv[1],L"actcal")==0;
-    if (!rco && !loss && !actcal && std::wcscmp(argv[1],L"gsq")!=0) throw std::runtime_error("unknown mode");
+    const bool actcal_k=std::wcscmp(argv[1],L"actcal-k")==0;
+    if (!rco && !loss && !actcal && !actcal_k && std::wcscmp(argv[1],L"gsq")!=0) throw std::runtime_error("unknown mode");
     wchar_t * target_end=nullptr;
     const float target=std::wcstof(argv[10],&target_end);
     if (target_end==argv[10] || *target_end || !std::isfinite(target)) throw std::runtime_error("invalid target");
-    const Parameters pc={integer(argv[5],actcal?262144:(rco?8:4096)),integer(argv[6],actcal?8:128),integer(argv[7],actcal?2048:32),
+    const Parameters pc={integer(argv[5],actcal?262144:(actcal_k?32768:(rco?8:4096))),integer(argv[6],actcal?8:128),integer(argv[7],actcal?2048:(actcal_k?256:32)),
                          integer(argv[8],8),integer(argv[9],UINT32_MAX),target};
     const unsigned repeats=integer(argv[11],16);
     if (!pc.blocks || !pc.samples || (rco && ((pc.bits!=3 && pc.bits!=4) || pc.steps<2)) ||
         (actcal && (pc.bits!=4 && pc.bits!=8)) ||
-        (!rco && !loss && !actcal && pc.bits!=2 && pc.bits!=3 && pc.bits!=4 && pc.bits!=6 && pc.bits!=8) ||
+        (actcal_k && (pc.bits<1 || pc.bits>2 || pc.blocks%pc.samples!=0)) ||
+        (!rco && !loss && !actcal && !actcal_k && pc.bits!=2 && pc.bits!=3 && pc.bits!=4 && pc.bits!=6 && pc.bits!=8) ||
         repeats==0) throw std::runtime_error("parameters outside the supported range");
-    const size_t input_floats=actcal ? size_t(pc.blocks)*33+pc.samples*32 : (loss ? size_t(pc.blocks)*512 : size_t(pc.blocks)*(rco?pc.bits:256)*(1+pc.samples));
-    const size_t output_floats=actcal ? size_t(pc.blocks)*(pc.bits==4?5:9) : (loss ? pc.blocks : (rco ? pc.blocks+4+pc.blocks*pc.bits : size_t(pc.blocks)*266));
+    const size_t input_floats=actcal_k ? (size_t(pc.blocks)*(pc.bits+1)+pc.samples)*256 :
+        (actcal ? size_t(pc.blocks)*33+pc.samples*32 : (loss ? size_t(pc.blocks)*512 : size_t(pc.blocks)*(rco?pc.bits:256)*(1+pc.samples)));
+    const size_t output_floats=actcal_k ? size_t(pc.blocks)*pc.bits :
+        (actcal ? size_t(pc.blocks)*(pc.bits==4?5:9) : (loss ? pc.blocks : (rco ? pc.blocks+4+pc.blocks*pc.bits : size_t(pc.blocks)*266)));
     const vk::DeviceSize input_size=input_floats*sizeof(float),output_size=output_floats*sizeof(float);
     std::ifstream input_file(std::filesystem::path(argv[2]),std::ios::binary|std::ios::ate);
     if (!input_file || input_file.tellg()!=std::streamoff(input_size)) throw std::runtime_error("input size mismatch");
@@ -222,7 +226,7 @@ int wmain(int argc, wchar_t ** argv) try {
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute,*pipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute,*pl,0,set,{});
         cmd.pushConstants(*pl,vk::ShaderStageFlagBits::eCompute,0,sizeof(pc),&pc);
-        cmd.dispatch(actcal?(pc.blocks+63)/64:(rco?1:pc.blocks),1,1);
+        cmd.dispatch((actcal || actcal_k)?(pc.blocks+63)/64:(rco?1:pc.blocks),1,1);
         cmd.writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe,*queries,1);
         barrier(compute,transfer,vk::AccessFlagBits::eShaderWrite,vk::AccessFlagBits::eTransferRead);
         cmd.copyBuffer(*b.buffer,*staged.buffer,vk::BufferCopy(0,0,output_size));

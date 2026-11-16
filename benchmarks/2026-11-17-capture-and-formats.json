@@ -1,0 +1,63 @@
+{
+  "date": "2026-11-17",
+  "hardware": "Radeon RX 580 2048SP 8 GiB + Xeon E5-2696 v3",
+  "converter": {
+    "sha256": "7234634057d1e3fb993a93253f7ff93af54a888e09104a28ce42e60be2a95613",
+    "bytes": 233470464,
+    "gui": true,
+    "weighted_calibration": [
+      {
+        "layout": "Q2_K",
+        "bytes": 2848,
+        "recovered_initial_scale_bytes": true,
+        "sha256": "0064d4652409657bf04121208c149d4abe893a911b74abbe36d7b72544ff3ae7"
+      },
+      {
+        "layout": "Q3_K",
+        "bytes": 3680,
+        "recovered_initial_scale_bytes": true,
+        "sha256": "d5c4a54058a57ad1dc0ce6ec2df53ffb0fe4f3f2ac3d8407155da4063b677519"
+      },
+      {
+        "layout": "Q4_K",
+        "bytes": 4768,
+        "recovered_initial_scale_bytes": true,
+        "sha256": "1e1b7ccb3dd4ea272e91285f848f9d52e2c24339a157576c4f60854f3129fba0"
+      },
+      {
+        "layout": "Q5_K",
+        "bytes": 5792,
+        "recovered_initial_scale_bytes": true,
+        "sha256": "33c595840c1cf67c21ef8c7d9b88c87693a45d74c4d466c757dbc8af9474433c"
+      },
+      {
+        "layout": "Q6_K",
+        "bytes": 6880,
+        "recovered_initial_scale_bytes": true,
+        "sha256": "a575f3dc17e506d61e3c43ffe5d41cedc200232b67613bf51df3c4960d368709"
+      }
+    ]
+  },
+  "coverage": {
+    "umt5": {
+      "eligible": 169,
+      "captured": 168,
+      "captured_bytes": 2786328576,
+      "eligible_bytes": 3647778816,
+      "missing": [
+        "token_embd.weight"
+      ],
+      "stock_sha256": "17cf97a5bbbc60a646d6105b832b6f657ce904a8a1ad970e4b59df0c67584a40",
+      "worker_sha256": "dd70323985387ed562aa1d2179c6b332cd4612e2dc5f93efd20e7713b17b89b9"
+    },
+    "yue2": {
+      "eligible": 395,
+      "captured": 395,
+      "captured_bytes": 3396927488,
+      "eligible_bytes": 3396927488,
+      "missing": [],
+      "stock_sha256": "52be345b5155bf9ef0b2411e7df8d1d2b8e13b6d977a2f70c35612ec69b1f591",
+      "worker_sha256": "dd70323985387ed562aa1d2179c6b332cd4612e2dc5f93efd20e7713b17b89b9"
+    }
+  }
+}

@@ -1,4 +1,4 @@
-"""Activation-weighted Vulkan calibration of every observed Q4_0/Q8_0 matrix."""
+"""Activation-weighted Vulkan calibration with fixed GGUF layouts."""
 from contextlib import ExitStack
 from pathlib import Path
 import tempfile
@@ -6,7 +6,10 @@ import tempfile
 import numpy as np
 
 
-LAYOUTS = {'Q4_0': (4, 18), 'Q8_0': (8, 34)}
+LAYOUTS = {'Q4_0': (4, 18), 'Q8_0': (8, 34), 'Q2_K': (2, 84), 'Q3_K': (3, 110),
+           'Q4_K': (4, 144), 'Q5_K': (5, 176), 'Q6_K': (6, 210)}
+K_SCALES = {'Q2_K': (80, 82), 'Q3_K': (108,), 'Q4_K': (0, 2),
+            'Q5_K': (0, 2), 'Q6_K': (208,)}
 PREFIXES = ('model.diffusion_model.', 'diffusion_model.')
 FLOATS = {'F32', 'F16', 'BF16', 'F8_E4M3', 'F8_E5M2'}
 
@@ -90,6 +93,30 @@ def solve(converter, root, helper, weights, importance, old, bits, steps):
     return np.concatenate((scale.reshape(-1,1).view(np.uint8),encoded[:,1:].copy().view(np.uint8)),axis=1)
 
 
+def solve_k(converter, root, helper, weights, importance, old, kind, decode):
+    """Fit the FP16 superblock scales to the existing K-quants and subscale codes."""
+    offsets = K_SCALES[kind.name]
+    basis = old.copy()
+    data, result = root/'input.bin', root/'output.bin'
+    with data.open('wb') as f:
+        weights.astype('<f4',copy=False).tofile(f)
+        for unit in offsets:
+            for offset in offsets:
+                basis[:,offset:offset+2] = (0,60 if offset==unit else 0)  # FP16 1.0 or 0.0
+            decode(basis,kind).astype('<f4',copy=False).tofile(f)
+        importance.astype('<f4',copy=False).tofile(f)
+    converter.run(helper,'actcal-k',data,result,helper.with_name('actcal_k.spv'),
+                  len(old),1,len(importance)//256,len(offsets),0,0,1)
+    scale=np.fromfile(result,dtype='<f4')
+    if scale.size!=len(old)*len(offsets) or not np.isfinite(scale).all():
+        raise RuntimeError('Некорректные масштабы Vulkan для K-кванта.')
+    packed=old.copy()
+    encoded=np.clip(scale.reshape(-1,len(offsets)),-65504,65504).astype('<f2')
+    for i,offset in enumerate(offsets):
+        packed[:,offset:offset+2] = encoded[:,i].copy().view(np.uint8).reshape(-1,2)
+    return packed
+
+
 def optimize_full(converter, manifest, base, reference, target, output, gguf_module, *, capture, detect,
                   evidence=None, binaries=None):
     if base.endianess.name!='LITTLE':
@@ -105,9 +132,10 @@ def optimize_full(converter, manifest, base, reference, target, output, gguf_mod
     if specs and set(specs)-weights.keys():
         raise ValueError('В манифесте есть неизвестные тензоры.')
     entries=[t for t in base.tensors if (all_weights or t.name in specs)
-             and t.tensor_type.name in LAYOUTS and len(t.shape)==2 and int(t.shape[0])%32==0]
+             and t.tensor_type.name in LAYOUTS and len(t.shape)==2
+             and int(t.shape[0]) % (256 if t.tensor_type.name in K_SCALES else 32) == 0]
     if not entries or not all_weights and len(entries)!=len(specs):
-        raise ValueError('Нужны матрицы Q4_0/Q8_0, у которых ширина кратна 32.')
+        raise ValueError('Нужны матрицы Q4_0/Q8_0 или Q2_K–Q6_K с подходящей шириной блока.')
     helper=(binaries or Path(__file__).resolve().parent/'vulkan')/'vulkan-gsq.exe'
     decode=gguf_module('quants').dequantize
     with tempfile.TemporaryDirectory(prefix='.gguf-full-cal-',dir=output.parent) as temp, ExitStack() as maps:
@@ -154,7 +182,10 @@ def optimize_full(converter, manifest, base, reference, target, output, gguf_mod
                 reference_values=np.ascontiguousarray(ref(t,part),dtype=np.float32)
                 n=len(reference_values)
                 old=t.data[part].reshape(-1,packed_bytes)
-                packed=solve(converter,root,helper,reference_values,importance,old,bits,steps)
+                if t.tensor_type.name in K_SCALES:
+                    packed=solve_k(converter,root,helper,reference_values,importance,old,t.tensor_type,decode)
+                else:
+                    packed=solve(converter,root,helper,reference_values,importance,old,bits,steps)
                 expected=reference_values @ holdout
                 old_loss=((decode(old,t.tensor_type).reshape(n,width) @ holdout-expected)**2).sum(axis=1)
                 new_loss=((decode(packed,t.tensor_type).reshape(n,width) @ holdout-expected)**2).sum(axis=1)

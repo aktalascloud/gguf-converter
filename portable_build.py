@@ -112,7 +112,7 @@ def included(relative):
 def build_vulkan(args, destination):
     destination.mkdir()
     source = HERE / 'vulkan'
-    for mode in ('gsq', 'rco', 'loss', 'actcal'):
+    for mode in ('gsq', 'rco', 'loss', 'actcal', 'actcal_k'):
         subprocess.run([str(args.glslc), '--target-env=vulkan1.1', '-O',
                         str(source / f'{mode}.comp'), '-o', str(destination / f'{mode}.spv')], check=True)
     subprocess.run([str(args.cxx), '-std=c++17', '-O2', '-municode', '-static', '-static-libgcc', '-static-libstdc++',
@@ -162,8 +162,9 @@ def build(args):
         if args.native_capture:
             directory = app / 'capture-runtime'
             directory.mkdir()
-            for filename in ('koboldcpp.py', 'koboldcpp_vulkan.dll'):
-                shutil.copyfile(args.native_capture / filename, directory / filename)
+            for rel in (Path('koboldcpp.py'), Path('koboldcpp_vulkan.dll'), Path('embd_res/yue2_qwen_tiktoken.embd')):
+                (directory / rel.parent).mkdir(parents=True,exist_ok=True)
+                shutil.copyfile(args.native_capture / rel, directory / rel)
 
         payload = workspace / 'converter.zip'
         with zipfile.ZipFile(payload, 'w', zipfile.ZIP_DEFLATED, compresslevel=3) as archive:

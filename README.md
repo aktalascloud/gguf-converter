@@ -45,9 +45,11 @@ The v1.3.0 RX 580 check covers automatic capture on ABDM and Wan, photo generati
 
 ### Calibration with the original tensor layouts
 
-For a model dominated by Q4_0 or Q8_0, enable weight calibration and select the existing tier. Provide the matching GGUF or Safetensors checkpoint. `ACTCAL-Q4` and `ACTCAL-Q8` use activation-weighted least squares on Vulkan. Each candidate matrix is measured on 8–32 captured rows split into fitting and selection sets. The converter keeps tensor types, model metadata, and payload size. Check output quality separately on independent prompts.
+Enable weight calibration, select the existing tier and provide the matching GGUF or Safetensors checkpoint. ACTCAL uses activation-weighted least squares on Vulkan. For Q4_0 and Q8_0 it fits codes and scales. For Q2_K through Q6_K it fits superblock scales with the existing packed codes and subscales. Candidate rows are selected by projection error on a separate subset of the recorded activations. Tensor types, model metadata and payload size are preserved.
 
-For the CLI, use `-q ACTCAL-Q4` or `-q ACTCAL-Q8` with a `gguf-activation-calibration-v1` manifest. Set `base`, `reference` and `capture` the same way as for GSQ/RCO. Under `targets`, use `"4": {"all": true}` or `"8": {"all": true}` to capture and fit every reachable Q4_0 and Q8_0 matrix. Use `tensors` with names mapped to `.npy` or `null` for explicit selections. Safetensors inputs support common floating formats, scaled INT8, and W4A8 INT4 with its codebook and scales. Same-tier K-quant GSQ uses a GGUF reference and the `GSQ-RCO` modes.
+CLI ACTCAL tiers are Q2, Q3, Q4, Q5, Q6 and Q8. Use `gguf-activation-calibration-v1` with `base`, `reference`, and `capture`. For a mixed Q4_K_M encoder, set `"4": {"all": true}` under `targets` to preserve each matrix's Q4_K or Q6_K type. For explicit selection, set `tensors` to names mapped to `.npy` files or `null`. Safetensors references support common floating formats, scaled INT8 and W4A8 INT4 with scales and codebooks. The earlier GSQ/RCO workflow has its own manifest.
+
+For YuE2, the converter detects the music GGUF and looks for a matching KoboldCpp music profile. A manifest can set `capture.base_part` to `musicllm` and provide `musicvae` in `capture.models`. `capture.prompt` is the musical style, and `capture.lyrics` optionally supplies training lyrics. The capture worker records Vulkan inputs to AR and NAR matrix products. Lookup tables and tensors unused by the calibration request keep their original bytes.
 
 ## GSQ-RCO assembly
 
