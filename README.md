@@ -2,20 +2,24 @@
 
 [Русский](README.ru.md) · [Download the portable EXE](https://github.com/aktalascloud/gguf-converter/releases/latest)
 
-Convert local model weights to **Q8_0** or **Q4_0** on a Windows 10/11 x64 PC with AVX2. Open `GGUF-Converter.exe`, select the file or Hugging Face folder, choose the format, and start conversion. You can also drop a file or folder onto the EXE. Python, Tk and the CPU conversion tools are bundled and extracted to a temporary folder when the window opens.
+Convert local model weights to **Q2, Q4, Q6 or Q8** on Windows 10/11 x64. Open `GGUF-Converter.exe`, select a supported file or Hugging Face directory, and choose the quantization. The app detects text, image and video models from metadata and recognized tensor structures. The window displays the resulting GGUF type and reports the exact file size after conversion. Python and the conversion tools are bundled.
 
 | Input | Conversion path |
 |---|---|
 | Text GGUF | llama.cpp, including sharded models and supported requantization |
 | Local Hugging Face folder | Supported architectures with config, tokenizer and weights. FP32, FP16, BF16, supported FP8, GPTQ, AWQ GEMM 4-bit with zero points, supported compressed-tensors layouts and bitsandbytes NF4/FP4 or row-wise INT8 |
 | Diffusion weights | GGUF, Safetensors and CKPT through stable-diffusion.cpp. Includes scaled FP8 E4M3/E5M2 and Comfy INT8 tensorwise Safetensors. Wan architecture metadata is preserved or detected from the tensor names. |
-| Artius MOSS | Comfy INT8 and W4A8, with separate diffusion and text-encoder modes |
+| Packed ComfyUI weights | Supported tensorwise INT8, scaled FP8, and W4A8 layouts with their metadata |
 
-The converter writes a separate GGUF and protects existing files from replacement. Small tensors and tensors with incompatible dimensions may remain in floating point. Q4_0 conversion from Hugging Face needs room for an intermediate FP32 GGUF. Some scaled diffusion checkpoints also need temporary FP32 space on the output drive. Requantizing INT4 to Q8_0 increases the storage precision, while accuracy is limited by the source weights.
+The converter writes a separate GGUF and protects existing files from replacement. Tensors that cannot use the chosen block layout retain a compatible representation. New or proprietary architectures and packing schemes require a matching loader. Hugging Face K-quant conversion may stage an FP32 GGUF. Some scaled diffusion checkpoints also need temporary FP32 space.
+
+### Target hardware
+
+Choose the GPU and CPU targets independently. For example, Vulkan with AVX and CUDA/Pascal P40 with AVX2 both produce standard GGUF. Universal uses `Q2_K`, `Q4_K`, `Q6_K`, or `Q8_0`. Q4 uses `Q4_0` when the GPU is Polaris/Pascal or the CPU target is AVX/AVX2. The other choices retain their standard formats. NVIDIA CUDA / INT8 selects Q8 in the window. The inference runtime selects Vulkan, AVX, or CUDA kernels at load time. CUDA is unnecessary for conversion. Eligible CPU builds can repack `Q4_0` at load time. Pascal P40 supports INT8 dot products with a compatible CUDA runtime. [GGML runtime repacking](https://github.com/ggml-org/llama.cpp/blob/master/ggml/CMakeLists.txt) · [NVIDIA Pascal DP4A](https://developer.nvidia.com/blog/mixed-precision-programming-cuda-8/)
 
 ## Vulkan GSQ-RCO preview
 
-Select **GSQ-RCO-Q2**, **GSQ-RCO-Q3** or **GSQ-RCO-Q4** and open a `gguf-gsq-rco-vulkan-v1` manifest. The portable app runs Gumbel-Softmax calibration and constrained RCO on a supported AMD Polaris GPU with Vulkan 1.1. It writes standard Q2_K, Q3_K and Q4_K tensors into a complete GGUF. The AMD Vulkan driver is required. [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO)
+Enable **GSQ/RCO (Vulkan)** and open a media GGUF or a `gguf-gsq-rco-vulkan-v1` manifest. A media GGUF uses automatic activation capture in the bundled Vulkan media worker. Provide a calibration prompt and optionally a `.kcpps` profile for the companion weights. Direct GGUF selection calibrates two recognized attention projections. The manifest controls up to eight matrices and also supports Q3 through the CLI. GSQ writes standard Q2_K, Q3_K, Q4_K, Q6_K or Q8_0 tensor variants. The optimization mode disables both target selectors and requires a supported AMD Polaris driver. The capture worker uses an AVX2 host build. [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO)
 
 ```json
 {
@@ -33,9 +37,9 @@ Select **GSQ-RCO-Q2**, **GSQ-RCO-Q3** or **GSQ-RCO-Q4** and open a `gguf-gsq-rco
 }
 ```
 
-Paths are relative to the manifest. Supply 2–32 captured activation rows per matrix as a NumPy `.npy` array of shape `[samples, input_width]`. The current search accepts up to eight rank-two weights with widths divisible by 256. RCO uses normalized layer reconstruction error and enforces the exact integer budget for all tensor data, including untouched weights. The mode label selects a manifest entry. Actual per-tensor types and the resulting size depend on that entry. This is a bounded adaptation of the research algorithms. Activation capture and whole-model task-loss optimization are external to this workflow.
+Paths are relative to the manifest. Use a NumPy `.npy` array of 2–32 activation rows for a matrix or `null` for capture. For automatic capture add `"capture": {"prompt": "…", "profile": "photo.kcpps"}`. A profile is optional for standalone diffusion models. Use `capture.base_part` to replace an encoder such as `sdclip1` and `capture.profile_root` to resolve relative paths in the profile. Enable `"model_loss": true` to rerank the feasible GSQ/RCO and rounding candidates by pixel MSE on a complete calibration render. The measured loss covers the complete output. GSQ still learns per-matrix weights, and RCO proposes a bounded set of configurations under an exact tensor-byte budget.
 
-The RX 580 validation used two projections per model in ABDM, the MOSS Qwen encoder and Wan. Held-out layer error decreased by 1.5–61.8% against rounding to the same K-quant types. The photo and 480p video fixtures took approximately the same time, with changes in the fixed-seed renders. [November 16 measurements and SHA-256 evidence](benchmarks/2026-11-16-rx580.json)
+Earlier local-batch calibration evidence is recorded by binary SHA. [v1.2.0 RX 580 measurements](benchmarks/2026-11-16-rx580.json)
 
 ## GSQ-RCO assembly
 
@@ -68,12 +72,14 @@ To run a conversion from PowerShell, pass `--cli` and wait for the process to ex
 Start-Process -FilePath '.\GGUF-Converter.exe' -ArgumentList '--cli "D:\Models\My model" -q Q4_0 -t 8' -Wait -PassThru
 ```
 
+For independent targets use `--gpu vulkan --cpu avx`, or `--gpu pascal --cpu avx2`. Use `-q Q4` for target-aware selection. An explicit `-q Q4_K` or `-q Q4_0` fixes the tensor format.
+
 To build from source, run the following on Windows with Python 3.12+ and the Windows .NET Framework C# compiler available. The build uses the pinned checksums in `dependencies.lock.json` and writes the EXE to `dist/`.
 
 ```powershell
 py -3.12 -I -B portable_build.py
 ```
 
-To include the Vulkan shaders and helper, pass all four options `--cxx`, `--glslc`, `--vulkan-include` and `--vulkan-import`. Point them to the MinGW-w64 `g++.exe`, Vulkan SDK `glslc.exe`, SDK include directory and `vulkan-1.lib`. The portable release bundles the compiled helper and SPIR-V.
+To include the Vulkan shaders and helper, pass all four options `--cxx`, `--glslc`, `--vulkan-include` and `--vulkan-import`. Point them to the MinGW-w64 `g++.exe`, Vulkan SDK `glslc.exe`, SDK include directory and `vulkan-1.lib`. Pass `--native-capture` with the directory produced by `vulkan/build_capture.py` to enable the embedded media worker. [Corresponding source and notices](NOTICE.md)
 
 [License](LICENSE.md) · [Corresponding sources and component notices](NOTICE.md).

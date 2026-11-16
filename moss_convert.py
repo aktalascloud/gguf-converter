@@ -7,7 +7,7 @@ import tempfile
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from convert import comfy_formats, gguf_module, safe_header
+from convert import comfy_formats, gguf_file_type, gguf_module, native_quantizer, safe_header
 
 
 def unrotate(values, size=256):
@@ -95,13 +95,13 @@ def convert(source, output, role, quantization):
     constants = gguf_module('constants')
     kind = constants.GGMLQuantizationType[quantization]
     block_size, block_bytes = constants.GGML_QUANT_SIZES[kind]
-    quantize = gguf_module('quants').quantize
+    quantize = native_quantizer(kind)
     writer_class = gguf_module('gguf_writer').GGUFWriter
     data = SafeFile(source)
     tempfile.tempdir = str(output.parent)
     writer = writer_class(output, 'moss_image' if role == 'image' else 'qwen35', use_temp_file=True)
     writer.add_name(source.stem)
-    writer.add_file_type(getattr(constants.LlamaFileType, 'MOSTLY_' + quantization))
+    writer.add_file_type(gguf_file_type(quantization))
     auxiliary = ('.comfy_quant', '.weight_scale', '.scale_weight', '.weight_s_rel',
                  '.weight_s_channel', '.weight_codebook', '.weight_correction')
     scratch = output.with_name('tensor.bin')
@@ -129,7 +129,7 @@ def convert(source, output, role, quantization):
             try:
                 for start in range(0, rows, 256):
                     part = slice(start, min(rows, start + 256))
-                    encoded[part] = quantize(decode_rows(data, name, part, config), kind)
+                    quantize(decode_rows(data, name, part, config), encoded[part])
                 writer.add_tensor(mapped, encoded, raw_dtype=kind)
             finally:
                 encoded._mmap.close()

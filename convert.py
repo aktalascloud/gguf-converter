@@ -2,6 +2,8 @@
 
 import argparse
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack
 from importlib import import_module
 import json
 from math import prod
@@ -19,24 +21,36 @@ from types import ModuleType
 HERE = Path(__file__).resolve().parent
 BACKENDS = HERE / 'backends'
 if not BACKENDS.is_dir():
-    BACKENDS = HERE.parents[1] / 'build' / 'gguf-q8'
+    BACKENDS = HERE.parents[1] / 'gguf-q8'
 PYTHON = Path(sys.executable).with_name('python.exe')
 USER_DIRECTORY = Path(os.environ.get('GGUF_CONVERTER_CWD', os.getcwd()))
-GSQ_RCO = ('GSQ-RCO-Q2', 'GSQ-RCO-Q3', 'GSQ-RCO-Q4')
-QUANTIZATIONS = ('Q8_0', 'Q4_0', *GSQ_RCO)
+FORMATS = {'Q2': 'Q2_K', 'Q4': 'Q4_K', 'Q6': 'Q6_K', 'Q8': 'Q8_0'}
+GPU_TARGETS = {
+    'auto': 'Универсальный GGUF',
+    'vulkan': 'Vulkan',
+    'polaris': 'AMD Polaris / Vulkan',
+    'cuda': 'NVIDIA CUDA / INT8',
+    'pascal': 'NVIDIA CUDA / Pascal P40',
+}
+CPU_TARGETS = {'auto': 'Универсальный GGUF', 'avx': 'AVX', 'avx2': 'AVX2'}
+GSQ_RCO = ('GSQ-RCO-Q2', 'GSQ-RCO-Q3', 'GSQ-RCO-Q4', 'GSQ-RCO-Q6', 'GSQ-RCO-Q8')
+QUANTIZATIONS = (*FORMATS, *FORMATS.values(), 'Q4_0', *GSQ_RCO)
 SAFETENSORS = {'.safetensors', '.sft'}
 MODES = {
     'auto': 'Авто',
     'text': 'Текстовая модель',
     'diffusion': 'Фото / видео (SD, Flux, Wan и др.)',
-    'moss-image': 'Artius MOSS · диффузор',
-    'moss-text': 'Artius MOSS · текстовый энкодер для SD',
+    'moss-image': 'Диффузионные веса ComfyUI',
+    'moss-text': 'Текстовый энкодер ComfyUI',
 }
 MEDIA_ARCHS = {
     'stable-diffusion', 'stable_diffusion', 'sd1', 'sd2', 'sd3', 'sdxl',
     'flux', 'flux1', 'flux2', 'flux3', 'wan', 'wan2', 'wan22', 'hunyuan_video',
     'ltxv', 'ltxav', 'qwen_image', 'qwen-image', 'z_image', 'z-image', 'moss_image',
 }
+VIDEO_IDS = ('wan', 'hunyuan_video', 'hunyuanvideo', 'ltx', 'mochi', 'cogvideo', 'skyreels', 'svd', 'animatediff')
+PHOTO_IDS = ('stable_diffusion', 'stablediffusion', 'sdxl', 'flux', 'qwen_image', 'qwenimage',
+             'z_image', 'zimage', 'pixart', 'sana', 'moss_image')
 SHARD = re.compile(r'^(.*)-(\d{5})-of-(\d{5})\.gguf$', re.IGNORECASE)
 ANSI = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]')
 PACKED_KEYS = ('.qweight', '.qzeros', '_packed', '.weight.absmax', '.weight.quant_map')
@@ -56,6 +70,16 @@ def suggested_output(source, quantization='Q8_0'):
     return source.parent / f'{name}-{quantization}.gguf'
 
 
+def output_quantization(quantization, gpu='auto', cpu='auto'):
+    if gpu not in GPU_TARGETS or cpu not in CPU_TARGETS:
+        raise ValueError('Неизвестная цель GPU или CPU.')
+    if quantization in GSQ_RCO and (gpu != 'auto' or cpu != 'auto'):
+        raise ValueError('GSQ/RCO выбирает типы по бюджету. Для этого режима оставьте цели GPU и CPU универсальными.')
+    if quantization == 'Q4' and (gpu in ('polaris', 'pascal') or cpu != 'auto'):
+        return 'Q4_0'
+    return FORMATS.get(quantization, quantization)
+
+
 def gguf_module(module):
     # Load the directory reader without the package's tokenizer and metadata extras.
     package = ModuleType('gguf')
@@ -65,13 +89,15 @@ def gguf_module(module):
 
 
 def open_gguf(path):
-    return gguf_module('gguf_reader').GGUFReader(path, 'r')
+    reader = gguf_module('gguf_reader')
+    reader.GGML_MAX_DIMS = max(reader.GGML_MAX_DIMS, 5)
+    return reader.GGUFReader(path, 'r')
 
 
 def read_gguf(path):
     reader = open_gguf(path)
     fields = {}
-    for key in ('general.architecture', 'general.type', 'split.count'):
+    for key in ('general.architecture', 'general.type', 'split.count', 'tokenizer.ggml.model'):
         field = reader.get_field(key)
         if field is not None:
             fields[key] = field.contents()
@@ -159,6 +185,21 @@ def hf_folder(source):
     raise ValueError('В папке нет весов model*.safetensors или pytorch_model*.bin.')
 
 
+def media_role(architecture, names):
+    tags = architecture.strip().lower().replace('-', '_')
+    if any(tag in tags for tag in VIDEO_IDS):
+        return 'Видео'
+    names = {n.removeprefix('model.diffusion_model.').removeprefix('diffusion_model.') for n in names}
+    if ('patch_embedding.weight' in names and any(n.startswith('blocks.0.self_attn.') for n in names)
+            and any(n.startswith(('blocks.0.cross_attn.', 'time_embedding.')) for n in names)):
+        return 'Видео'
+    if tags in MEDIA_ARCHS or any(tag in tags for tag in PHOTO_IDS):
+        return 'Фото'
+    if any(n.startswith(('input_blocks.', 'double_blocks.', 'down_blocks.')) for n in names):
+        return 'Фото'
+    return ''
+
+
 def gguf_source(source, mode):
     if match := SHARD.fullmatch(source.name):
         stem, _, total = match.groups()
@@ -175,47 +216,76 @@ def gguf_source(source, mode):
     if fields.get('general.type') == 'adapter':
         raise ValueError('Выберите веса полной модели. Этот GGUF содержит адаптер.')
     arch = fields.get('general.architecture', '')
+    label = media_role(arch, tensors)
     if mode == 'auto':
-        media = arch in MEDIA_ARCHS or any(n.startswith((
+        media = bool(label) or any(n.startswith((
             'model.diffusion_model.', 'diffusion_model.', 'double_blocks.',
             'single_blocks.', 'input_blocks.', 'down_blocks.', 'transformer_blocks.',
         )) for n in tensors)
         if not arch and not media:
-            raise ValueError('В GGUF не указана архитектура. Выберите режим модели вручную.')
+            if not fields.get('tokenizer.ggml.model'):
+                raise ValueError('Сохраните GGUF с метаданными архитектуры или выберите исходные веса с конфигурацией.')
         mode = 'diffusion' if media else 'text'
+        if mode == 'text' and arch and not fields.get('tokenizer.ggml.model'):
+            mode = 'encoder'
     if mode == 'diffusion' and (fields.get('split.count', 0) > 1 or match):
         raise ValueError('Для диффузионной модели выберите единый GGUF. Разделённый GGUF поддерживается для текстовых моделей.')
     if mode == 'diffusion' and any(t == 'I8' or (t.startswith('F8_') and n + '_scale' in tensors)
                                    for n, t in tensors.items()):
         raise ValueError('Для медиа GGUF со шкалами INT8/FP8 выберите исходный Safetensors с метаданными квантования.')
-    return source, mode
+    return source, mode, (label or 'Диффузионная модель') if mode == 'diffusion' else (
+        'Текстовый энкодер' if mode == 'encoder' else 'Текстовая модель')
 
 
 def route(source, mode):
     if mode.startswith('moss-'):
         if not source.is_file() or source.suffix.lower() not in SAFETENSORS:
-            raise ValueError('Для Artius MOSS выберите файл Safetensors.')
-        return source, mode
+            raise ValueError('Для упакованных весов ComfyUI выберите файл Safetensors.')
+        return source, mode, 'Фото' if mode == 'moss-image' else 'Текстовый энкодер'
     if source.is_dir() or source.suffix.lower() == '.bin':
         if mode == 'diffusion':
             raise ValueError('Для диффузии выберите файл GGUF, Safetensors или CKPT.')
-        return hf_folder(source), 'hf'
+        if source.is_dir() and mode == 'auto':
+            configs = [source / 'model_index.json', source / 'config.json']
+            tag = ' '.join(config_tag(p) for p in configs)
+            if media_role(tag, ()):
+                weights = [p for p in source.glob('*.safetensors') if p.is_file()]
+                if len(weights) != 1:
+                    raise ValueError('Выберите файл весов диффузора. Для папки нужна одна модель Safetensors.')
+                return route(weights[0], 'auto')
+        return hf_folder(source), 'hf', 'Текстовая модель'
     if source.suffix.lower() == '.gguf':
         return gguf_source(source, mode)
     if source.suffix.lower() in SAFETENSORS:
         if mode == 'text':
-            return hf_folder(source), 'hf'
+            return hf_folder(source), 'hf', 'Текстовая модель'
+        header, metadata, start = safe_header(source)
+        tag = ' '.join(str(metadata.get(k, '')) for k in ('modelspec.architecture', 'architecture', 'model_type'))
+        tag += ' ' + config_tag(source.parent / 'config.json')
+        label = media_role(tag, header)
         if mode == 'auto':
-            header, _, _ = safe_header(source)
             text_weight = any(n.startswith(('model.layers.', 'model.embed_tokens.', 'transformer.h.')) for n in header)
-            config_path = source.parent / 'config.json'
-            config = json.loads(config_path.read_text(encoding='utf-8-sig')) if config_path.is_file() else {}
-            if text_weight or (source.name.startswith('model') and (config.get('architectures') or config.get('model_type'))):
-                return hf_folder(source), 'hf'
-        return source, 'diffusion'
+            formats = comfy_formats(source, header, metadata, start)
+            w4a8 = any(cfg.get('format') == 'asym_w4a8_int8' for cfg in formats.values())
+            moss = 'moss' in tag.lower() or any(n.endswith('layers.0.proj.qkv.weight') for n in header)
+            text_component = text_weight or any(n.startswith(('model.language_model.', 'text_encoders.')) for n in header)
+            model_folder = (source.parent / 'config.json').is_file()
+            if (moss or w4a8) and (text_component or label == 'Фото' or
+                                   any(n.startswith('model.diffusion_model.') for n in header)):
+                return route(source, 'moss-text' if text_component else 'moss-image')
+            if not label and (text_weight or (model_folder and source.name.startswith(('model', 'pytorch_model')))):
+                return hf_folder(source), 'hf', 'Текстовая модель'
+        return source, 'diffusion', label or 'Диффузионная модель'
     if source.suffix.lower() == '.ckpt' and mode != 'text':
-        return source, 'diffusion'
+        return source, 'diffusion', 'Диффузионная модель'
     raise ValueError('Выберите GGUF, Safetensors, CKPT или папку Hugging Face.')
+
+
+def config_tag(path):
+    if not path.is_file():
+        return ''
+    details = json.loads(path.read_text(encoding='utf-8-sig'))
+    return ' '.join(str(details.get(key, '')) for key in ('architectures', '_class_name', 'model_type'))
 
 
 def validate_media(source, moss):
@@ -227,7 +297,7 @@ def validate_media(source, moss):
     formats = comfy_formats(source, header, metadata, start)
     expand = False
     if not moss and any(n.endswith(PACKED_KEYS) or '.quant_state.' in n for n in header):
-        raise ValueError('Обнаружены упакованные веса. Для текстовой модели выберите папку Hugging Face, для W4A8 Artius выберите режим MOSS.')
+        raise ValueError('Этот формат упакованных весов не распознан. Проверьте конфигурацию модели и метаданные шкал.')
     for name, info in header.items():
         if not name.endswith('.weight'):
             continue
@@ -239,7 +309,7 @@ def validate_media(source, moss):
             expand = True
         if scheme == 'asym_w4a8_int8':
             if not moss:
-                raise ValueError('Для W4A8 Artius выберите режим MOSS.')
+                raise ValueError('Для W4A8 не определена архитектура по метаданным и тензорам.')
             if (len(info['shape']) != 2 or info['shape'][1] % 16 or not all(
                     base + suffix in header for suffix in ('.weight_codebook', '.weight_s_rel', '.weight_s_channel'))):
                 raise ValueError(f'Неполная упаковка W4A8 у {name}.')
@@ -328,7 +398,7 @@ class Conversion:
         self.log(f'Записываю архитектуру GGUF {arch}.')
         result = stage.with_name('with-architecture.gguf')
         writer = import_module('gguf.gguf_writer').GGUFWriter(result, arch)
-        file_type = getattr(gguf_module('constants').LlamaFileType, 'MOSTLY_' + quantization)
+        file_type = gguf_file_type(quantization)
         try:
             writer.add_name(source.stem)
             writer.add_file_type(file_type)
@@ -379,14 +449,8 @@ class Conversion:
                 from vulkan_workflow import optimize
             finally:
                 sys.path.pop(0)
-            # Some MOSS GGUF files carry rank-five VAE tensors that are copied as-is.
-            reader_module = gguf_module('gguf_reader')
-            prior_dims = reader_module.GGML_MAX_DIMS
-            try:
-                reader_module.GGML_MAX_DIMS = max(prior_dims, 5)
-                return optimize(self, manifest, local_gguf(plan.get('base')), target, output, gguf_module)
-            finally:
-                reader_module.GGML_MAX_DIMS = prior_dims
+            return optimize(self, manifest, local_gguf(plan.get('base')), target, output, gguf_module, bits,
+                            capture=plan.get('capture'), detect=route, model_loss=plan.get('model_loss', False))
 
         assignments = target['tensors']
         variants = plan.get('variants')
@@ -477,9 +541,10 @@ class Conversion:
         self.log(f'Готово: {output}\nТензоры: {dict(counts)}. Весовой объём: {8*size/elements:.3f} бит/параметр.')
         return output
 
-    def convert(self, source, output=None, mode='auto', threads=None, quantization='Q8_0'):
+    def convert(self, source, output=None, mode='auto', threads=None, quantization='Q8_0', gpu='auto', cpu='auto'):
         if quantization not in QUANTIZATIONS:
             raise ValueError(f'Неизвестный формат GGUF {quantization}.')
+        quantization = output_quantization(quantization, gpu, cpu)
         source = Path(os.path.abspath(USER_DIRECTORY / Path(source).expanduser()))
         if not source.exists():
             raise FileNotFoundError(source)
@@ -491,20 +556,19 @@ class Conversion:
             raise FileExistsError(f'Файл уже существует. Выберите другое имя: {output}')
         if quantization in GSQ_RCO:
             return self.assemble_gsq_rco(source, output, int(quantization[-1]))
-        source, mode = route(source, mode)
+        source, mode, detected = route(source, mode)
         expand = False
         if mode in ('diffusion', 'moss-image', 'moss-text'):
             expand = validate_media(source, mode.startswith('moss-'))
         threads = threads if threads is not None else min(8, os.cpu_count() or 1)
         if threads < 1:
             raise ValueError('Число потоков должно быть положительным.')
-        self.log(f'Режим {mode}. Формат {quantization}. Вход {source}')
+        self.log(f'Распознано: {detected}. Формат {quantization}. GPU {GPU_TARGETS[gpu]}, CPU {CPU_TARGETS[cpu]}. Вход {source.name}')
         with tempfile.TemporaryDirectory(prefix='.gguf-convert-', dir=output.parent) as temp:
             stage = Path(temp) / 'result.gguf'
             llama = BACKENDS / 'llama' / 'llama-quantize.exe'
             llama_flags = ['--allow-requantize']
-            if quantization == 'Q4_0':
-                llama_flags.append('--pure')
+            llama_flags.append('--pure')
             if mode == 'hf':
                 hf_type = 'q8_0' if quantization == 'Q8_0' else 'f32'
                 fp8_args = ['--fp8-as-q8'] if quantization == 'Q8_0' else []
@@ -518,6 +582,10 @@ class Conversion:
                     stage = final
             elif mode == 'text':
                 self.run(llama, *llama_flags, source, stage, quantization, threads)
+            elif mode == 'encoder' or (mode == 'diffusion' and source.suffix.lower() == '.gguf'):
+                if SHARD.fullmatch(source.name) or read_gguf(source)[0].get('split.count', 0) > 1:
+                    raise ValueError('Для отдельного текстового энкодера выберите единый GGUF.')
+                self.requantize_gguf(source, stage, quantization, threads)
             elif mode == 'diffusion':
                 original = source
                 if expand:
@@ -534,23 +602,110 @@ class Conversion:
             _, types = read_gguf(stage)
             counts = Counter(types.values())
             raw_weights = any(name.endswith('.weight') and kind.startswith('I') for name, kind in types.items())
-            if not counts[quantization] or raw_weights or set(counts) - PLAIN_TYPES - {quantization}:
-                raise ValueError(f'Конвертер вернул GGUF без целевой схемы {quantization}: {dict(counts)}')
+            if not counts[quantization] or raw_weights or set(counts) - OUTPUT_TYPES:
+                raise ValueError(f'В выходном GGUF нет совместимых весов {quantization} или есть неподдерживаемые типы: {dict(counts)}')
             with self.lock:
                 if self.cancelled:
                     raise InterruptedError('Конвертация отменена.')
                 # Windows rename publishes the verified file atomically and fails if it already exists.
                 stage.rename(output)
-        self.log(f'Готово: {output}\nТензоры: {dict(counts)}')
+        self.log(f'Готово: {output}\nРазмер: {output.stat().st_size:,} байт ({output.stat().st_size / 2**30:.3f} GiB)\nТензоры: {dict(counts)}')
         return output
+
+    def requantize_gguf(self, source, output, quantization, threads):
+        import numpy as np
+
+        reader = open_gguf(source)
+        constants = gguf_module('constants')
+        kind = constants.GGMLQuantizationType[quantization]
+        block, block_bytes = constants.GGML_QUANT_SIZES[kind]
+        dequantize = gguf_module('quants').dequantize
+        encode = native_quantizer(kind)
+        replacements = {}
+        with ExitStack() as maps, ThreadPoolExecutor(max_workers=threads) as pool:
+            for i, tensor in enumerate(reader.tensors):
+                if self.cancelled:
+                    raise InterruptedError('Конвертация отменена.')
+                if len(tensor.shape) != 2 or not tensor.name.endswith('.weight') or tensor.tensor_type == kind:
+                    continue
+                width, rows = map(int, tensor.shape)
+                if width % block:
+                    continue
+                data = np.memmap(output.parent / f'encoded-{i}.bin', mode='w+', dtype=np.uint8,
+                                 shape=(rows, width // block * block_bytes))
+                maps.callback(data._mmap.close)
+                batch = max(1, (1024 * 1024) // width)
+
+                def chunk(start):
+                    if self.cancelled:
+                        raise InterruptedError('Конвертация отменена.')
+                    part = slice(start, start + batch)
+                    encode(dequantize(tensor.data[part], tensor.tensor_type), data[part])
+
+                for _ in pool.map(chunk, range(0, rows, batch)):
+                    pass
+                replacements[tensor.name] = data, kind
+            return self.write_mixed_gguf(reader, output, replacements)
 
 
 PLAIN_TYPES = {'F16', 'F32', 'BF16', 'F64', 'I16', 'I32', 'I64'}
+OUTPUT_TYPES = PLAIN_TYPES | set(FORMATS.values()) | {'Q3_K', 'Q4_0', 'Q5_K'}
+
+
+def gguf_file_type(quantization):
+    name = 'Q4_K_M' if quantization == 'Q4_K' else quantization
+    return getattr(gguf_module('constants').LlamaFileType, 'MOSTLY_' + name)
+
+
+def native_quantizer(kind):
+    """Encode standard GGUF rows with the same GGML library as llama-quantize."""
+    import ctypes
+    import numpy as np
+
+    folder = BACKENDS / 'llama'
+    with os.add_dll_directory(str(folder.resolve())):
+        library = ctypes.CDLL(str((folder / 'ggml-base.dll').resolve()))
+    encode = library.ggml_quantize_chunk
+    encode.argtypes = (ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p,
+                       ctypes.c_int64, ctypes.c_int64, ctypes.c_int64, ctypes.c_void_p)
+    encode.restype = ctypes.c_size_t
+
+    def quantize(data, target):
+        data = np.ascontiguousarray(data, dtype=np.float32)
+        if not np.isfinite(data).all():
+            raise ValueError('В весах есть Inf/NaN.')
+        if encode(int(kind), data.ctypes.data, target.ctypes.data, 0, *data.shape, None) != target.nbytes:
+            raise RuntimeError('GGML вернула неверный размер квантованных весов.')
+
+    return quantize
+
+
+def automatic_gsq_plan(source, tier, prompt, profile):
+    reader = open_gguf(source)
+    _, _, role = route(source, 'auto')
+    if role not in ('Фото', 'Видео', 'Диффузионная модель'):
+        raise ValueError('Для автозаписи нужен GGUF диффузора. Для энкодера или LLM доступны манифесты.')
+    # ponytail: start with two attention projections; use a manifest to choose other matrices.
+    choices = [t for t in reader.tensors if len(t.shape) == 2 and int(t.shape[0]) % 256 == 0
+               and re.search(r'(?:self_attn\.[qkv]|proj\.qkv|proj\.o|attn[12]\.to_[qkv]|attn_qkv|q_proj|qkv)\.weight$', t.name)]
+    if not choices:
+        raise ValueError('Проекции для автозаписи не определены. Укажите тензоры в манифесте GSQ/RCO.')
+    choices = choices[:2]
+    kind = gguf_module('constants')
+    qtype = kind.GGMLQuantizationType[FORMATS[f'Q{tier}']]
+    block, size = kind.GGML_QUANT_SIZES[qtype]
+    budget = sum(t.n_bytes for t in reader.tensors) + sum(t.n_elements // block * size - t.n_bytes for t in choices)
+    capture = {'prompt': prompt}
+    if profile:
+        parent = profile.parent
+        capture.update(profile=str(profile), profile_root=str(parent.parent if parent.name == 'profiles' else parent))
+    return {'format': 'gguf-gsq-rco-vulkan-v1', 'base': str(source), 'model_loss': True, 'capture': capture,
+            'targets': {str(tier): {'max_tensor_bytes': budget, 'tensors': {t.name: None for t in choices}}}}
 
 
 def gui(source=''):
     import tkinter as tk
-    from tkinter import filedialog, messagebox, ttk
+    from tkinter import filedialog, messagebox, simpledialog, ttk
     from tkinter.scrolledtext import ScrolledText
 
     window = tk.Tk()
@@ -558,31 +713,64 @@ def gui(source=''):
     window.geometry('800x480')
     window.minsize(600, 360)
     window.columnconfigure(1, weight=1)
-    window.rowconfigure(5, weight=1)
+    window.rowconfigure(7, weight=1)
     input_value = tk.StringVar(value=source)
     output_value = tk.StringVar()
-    mode_value = tk.StringVar(value=MODES['auto'])
-    quantization_value = tk.StringVar(value=QUANTIZATIONS[0])
-    output_value.set(str(suggested_output(Path(source))) if source else '')
+    kind_value = tk.StringVar(value='Автоматически')
+    quantization_value = tk.StringVar(value='Q8')
+    optimize_value = tk.BooleanVar(value=False)
+    gpu_value = tk.StringVar(value=GPU_TARGETS['auto'])
+    cpu_value = tk.StringVar(value=CPU_TARGETS['auto'])
+    format_value = tk.StringVar()
+    guessed = ''
     events = queue.Queue()
     job = None
     closing = False
+
+    def selection():
+        value = quantization_value.get()
+        return 'GSQ-RCO-' + value if optimize_value.get() else value
+
+    def targets():
+        if optimize_value.get():
+            return 'auto', 'auto'
+        gpu = next(k for k, label in GPU_TARGETS.items() if label == gpu_value.get())
+        cpu = next(k for k, label in CPU_TARGETS.items() if label == cpu_value.get())
+        return gpu, cpu
+
+    def refresh(*_):
+        nonlocal guessed
+        state = 'disabled' if optimize_value.get() else 'readonly'
+        gpu_box.config(state=state)
+        cpu_box.config(state=state)
+        resolved = output_quantization(selection(), *targets())
+        format_value.set(resolved)
+        value = input_value.get().strip().strip('"')
+        path = USER_DIRECTORY / Path(value).expanduser()
+        if not value or not path.exists():
+            kind_value.set('Автоматически')
+            return
+        if path.suffix.lower() == '.json':
+            kind_value.set('Манифест GSQ/RCO')
+        else:
+            try:
+                kind_value.set(route(path, 'auto')[2])
+            except (ValueError, OSError, KeyError, RuntimeError):
+                kind_value.set('Требуется проверка файла')
+        suggested = str(suggested_output(path, resolved))
+        if not output_value.get() or output_value.get() == guessed:
+            output_value.set(suggested)
+        guessed = suggested
 
     def select_input(folder=False):
         value = filedialog.askdirectory(initialdir=USER_DIRECTORY) if folder else filedialog.askopenfilename(initialdir=USER_DIRECTORY,
             filetypes=[('Модели и манифест GSQ-RCO', '*.gguf *.safetensors *.sft *.ckpt *.bin *.json'), ('Все файлы', '*.*')])
         if value:
+            if Path(value).suffix.lower() == '.json':
+                optimize_value.set(True)
+            output_value.set('')
             input_value.set(value)
-            output_value.set(str(suggested_output(Path(value), quantization_value.get())))
-
-    def update_extension(event):
-        old = Path(output_value.get())
-        if not old.name:
-            return
-        for quant in QUANTIZATIONS:
-            if old.name.endswith('-' + quant + '.gguf'):
-                output_value.set(str(old.with_name(old.name.removesuffix(quant + '.gguf') + quantization_value.get() + '.gguf')))
-                break
+            refresh()
 
     def select_output():
         value = filedialog.asksaveasfilename(defaultextension='.gguf', filetypes=[('GGUF', '*.gguf')],
@@ -595,17 +783,42 @@ def gui(source=''):
         source = input_value.get().strip().strip('"')
         output = output_value.get().strip().strip('"') or None
         if not source:
-            messagebox.showerror('GGUF Q8_0', 'Выберите файл или папку модели.')
+            messagebox.showerror('GGUF', 'Выберите файл или папку модели.')
             return
-        mode = next(key for key, label in MODES.items() if label == mode_value.get())
-        quantization = quantization_value.get()
+        quantization = selection()
+        gpu, cpu = targets()
+        automatic = optimize_value.get() and Path(source).suffix.lower() == '.gguf'
+        prompt = None
+        profile = None
+        if automatic:
+            prompt = simpledialog.askstring('GSQ/RCO', 'Промпт для калибровки', parent=window,
+                                            initialvalue='A red flower by a window, soft natural light.')
+            if not prompt:
+                return
+            if messagebox.askyesno('GSQ/RCO', 'Подключить энкодер, VAE и другие веса из профиля .kcpps?', parent=window):
+                path = filedialog.askopenfilename(parent=window, initialdir=USER_DIRECTORY,
+                                                  filetypes=[('Профиль KoboldCpp', '*.kcpps')])
+                if not path:
+                    return
+                profile = Path(path).resolve(strict=True)
+        elif optimize_value.get() and Path(source).suffix.lower() != '.json':
+            messagebox.showerror('GSQ/RCO', 'Для калибровки выберите GGUF или JSON-манифест.')
+            return
         job = Conversion(lambda line: events.put(('log', line)))
         start_button.config(state='disabled')
         cancel_button.config(state='normal')
 
         def work():
             try:
-                job.convert(source, output, mode, quantization=quantization)
+                if automatic:
+                    original = (USER_DIRECTORY / Path(source).expanduser()).resolve(strict=True)
+                    with tempfile.TemporaryDirectory(prefix='gguf-plan-') as temp:
+                        plan = Path(temp) / 'capture.json'
+                        payload = automatic_gsq_plan(original, int(quantization[-1]), prompt, profile)
+                        plan.write_text(json.dumps(payload, ensure_ascii=False), encoding='utf-8')
+                        job.convert(plan, output or suggested_output(original, quantization), quantization=quantization)
+                else:
+                    job.convert(source, output, quantization=quantization, gpu=gpu, cpu=cpu)
             except Exception as exc:
                 events.put(('log', f'Ошибка: {exc}'))
             finally:
@@ -636,38 +849,64 @@ def gui(source=''):
         nonlocal closing
         if job is None:
             window.destroy()
-        elif messagebox.askyesno('GGUF Q8_0', 'Остановить текущую конвертацию?'):
+        elif messagebox.askyesno('GGUF', 'Остановить текущую конвертацию?'):
             closing = True
             job.cancel()
 
     for row, label, value in ((0, 'Источник', input_value), (1, 'Результат', output_value)):
         ttk.Label(window, text=label).grid(row=row, column=0, sticky='w', padx=8, pady=5)
-        ttk.Entry(window, textvariable=value).grid(row=row, column=1, sticky='ew', padx=4, pady=5)
+        field = ttk.Entry(window, textvariable=value)
+        field.grid(row=row, column=1, sticky='ew', padx=4, pady=5)
+        if row == 0:
+            field.bind('<FocusOut>', refresh)
+            field.bind('<Return>', refresh)
     ttk.Button(window, text='Файл…', command=select_input).grid(row=0, column=2, padx=4)
     ttk.Button(window, text='Папка…', command=lambda: select_input(True)).grid(row=0, column=3, padx=4)
     ttk.Button(window, text='Сохранить как…', command=select_output).grid(row=1, column=2, columnspan=2, sticky='ew', padx=4)
-    ttk.Label(window, text='Режим').grid(row=2, column=0, sticky='w', padx=8)
-    ttk.Combobox(window, textvariable=mode_value, values=list(MODES.values()), state='readonly').grid(row=2, column=1, sticky='ew', padx=4)
+    ttk.Label(window, text='Тип модели').grid(row=2, column=0, sticky='w', padx=8)
+    ttk.Label(window, textvariable=kind_value).grid(row=2, column=1, sticky='w', padx=4)
     ttk.Label(window, text='Формат').grid(row=3, column=0, sticky='w', padx=8)
-    format_box = ttk.Combobox(window, textvariable=quantization_value, values=QUANTIZATIONS, state='readonly')
+    format_box = ttk.Combobox(window, textvariable=quantization_value, values=tuple(FORMATS), state='readonly', width=8)
     format_box.grid(row=3, column=1, sticky='w', padx=4)
-    format_box.bind('<<ComboboxSelected>>', update_extension)
+    format_box.bind('<<ComboboxSelected>>', refresh)
+    ttk.Label(window, textvariable=format_value).grid(row=2, column=2, columnspan=2, sticky='w', padx=4)
+    ttk.Checkbutton(window, text='GSQ/RCO (Vulkan)', variable=optimize_value, command=refresh).grid(row=3, column=2, columnspan=2, sticky='w', padx=4)
+    for row, label, var, choices in ((4, 'Цель GPU', gpu_value, GPU_TARGETS), (5, 'Цель CPU', cpu_value, CPU_TARGETS)):
+        ttk.Label(window, text=label).grid(row=row, column=0, sticky='w', padx=8)
+        control = ttk.Combobox(window, textvariable=var, values=list(choices.values()), state='readonly')
+        control.grid(row=row, column=1, sticky='ew', padx=4)
+        if row == 4:
+            gpu_box = control
+        else:
+            cpu_box = control
+
+    def select_gpu(event):
+        if targets()[0] == 'cuda':
+            quantization_value.set('Q8')
+        refresh(event)
+    gpu_box.bind('<<ComboboxSelected>>', select_gpu)
+    cpu_box.bind('<<ComboboxSelected>>', refresh)
     start_button = ttk.Button(window, text='Конвертировать', command=start)
-    start_button.grid(row=4, column=1, sticky='w', padx=4, pady=8)
+    start_button.grid(row=6, column=1, sticky='w', padx=4, pady=8)
     cancel_button = ttk.Button(window, text='Отмена', state='disabled', command=lambda: job.cancel())
-    cancel_button.grid(row=4, column=2, columnspan=2, sticky='ew', padx=4)
+    cancel_button.grid(row=6, column=2, columnspan=2, sticky='ew', padx=4)
     console = ScrolledText(window, wrap='word')
-    console.grid(row=5, column=0, columnspan=4, sticky='nsew', padx=8, pady=(0, 8))
+    console.grid(row=7, column=0, columnspan=4, sticky='nsew', padx=8, pady=(0, 8))
     window.protocol('WM_DELETE_WINDOW', close)
+    if source and Path(source).suffix.lower() == '.json':
+        optimize_value.set(True)
+    refresh()
     poll()
     window.mainloop()
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Q8_0/Q4_0 и калибровка или сборка GSQ-RCO по манифесту')
+    parser = argparse.ArgumentParser(description='Автоопределение модели и конвертация GGUF в Q2, Q4, Q6, Q8')
     parser.add_argument('source', nargs='?')
     parser.add_argument('-o', '--output')
     parser.add_argument('--mode', choices=MODES, default='auto')
+    parser.add_argument('--gpu', choices=GPU_TARGETS, default='auto')
+    parser.add_argument('--cpu', choices=CPU_TARGETS, default='auto')
     parser.add_argument('-t', '--threads', type=int)
     parser.add_argument('-q', '--quantization', type=str.upper, choices=QUANTIZATIONS, default='Q8_0')
     parser.add_argument('--gui', action='store_true')
@@ -676,7 +915,7 @@ if __name__ == '__main__':
         if args.gui or args.source is None:
             gui(args.source or '')
         else:
-            Conversion().convert(args.source, args.output, args.mode, args.threads, args.quantization)
+            Conversion().convert(args.source, args.output, args.mode, args.threads, args.quantization, args.gpu, args.cpu)
     except (Exception, KeyboardInterrupt) as exc:
         print(f'Ошибка: {exc or "конвертация прервана"}', file=sys.stderr)
         sys.exit(1)

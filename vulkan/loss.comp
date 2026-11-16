@@ -1,0 +1,18 @@
+#version 450
+layout(local_size_x=256) in;
+layout(binding=0,std430) readonly buffer Inputs { float pixels[]; };
+layout(binding=1,std430) writeonly buffer Output { float squared_error[]; };
+shared float partial[256];
+
+void main() {
+    uint lane=gl_LocalInvocationIndex;
+    uint offset=gl_WorkGroupID.x*512u+lane;
+    float delta=pixels[offset]-pixels[offset+256u];
+    partial[lane]=delta*delta;
+    barrier();
+    for (uint span=128u;span>0u;span>>=1u) {
+        if (lane<span) partial[lane]+=partial[lane+span];
+        barrier();
+    }
+    if (lane==0u) squared_error[gl_WorkGroupID.x]=partial[0];
+}

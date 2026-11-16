@@ -10,7 +10,7 @@ layout(push_constant) uniform Config {
     uint seed;
     float target;
 } pc;
-const uint width=24u;
+const uint width=32u;
 float alpha[width];
 float p[width];
 float normal[width];

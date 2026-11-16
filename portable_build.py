@@ -112,7 +112,7 @@ def included(relative):
 def build_vulkan(args, destination):
     destination.mkdir()
     source = HERE / 'vulkan'
-    for mode in ('gsq', 'rco'):
+    for mode in ('gsq', 'rco', 'loss'):
         subprocess.run([str(args.glslc), '--target-env=vulkan1.1', '-O',
                         str(source / f'{mode}.comp'), '-o', str(destination / f'{mode}.spv')], check=True)
     subprocess.run([str(args.cxx), '-std=c++17', '-O2', '-municode', '-static', '-static-libgcc', '-static-libstdc++',
@@ -152,13 +152,18 @@ def build(args):
         for engine in ('llama', 'sd'):
             copy_crt(crt, backends / engine)
         shutil.copytree(args.hf, backends / 'hf', ignore=shutil.ignore_patterns('__pycache__', 'tests', 'examples'))
-        for filename in ('convert.py', 'hf.py', 'moss_convert.py', 'media_weights.py', 'vulkan_workflow.py',
+        for filename in ('convert.py', 'hf.py', 'moss_convert.py', 'media_weights.py', 'vulkan_workflow.py', 'native_capture.py',
                          'LICENSE.md', 'NOTICE.md'):
             shutil.copyfile(HERE / filename, app / filename)
         shutil.copytree(HERE / 'licenses', app / 'licenses')
         shutil.copyfile(HERE / 'dependencies.lock.json', app / 'dependencies.lock.json')
         if args.vulkan_include:
             build_vulkan(args, app / 'vulkan')
+        if args.native_capture:
+            directory = app / 'capture-runtime'
+            directory.mkdir()
+            for filename in ('koboldcpp.py', 'koboldcpp_vulkan.dll'):
+                shutil.copyfile(args.native_capture / filename, directory / filename)
 
         payload = workspace / 'converter.zip'
         with zipfile.ZipFile(payload, 'w', zipfile.ZIP_DEFLATED, compresslevel=3) as archive:
@@ -193,8 +198,11 @@ if __name__ == '__main__':
     parser.add_argument('--glslc', type=Path)
     parser.add_argument('--vulkan-include', type=Path)
     parser.add_argument('--vulkan-import', type=Path)
+    parser.add_argument('--native-capture', type=Path)
     args = parser.parse_args()
     options = (args.cxx, args.glslc, args.vulkan_include, args.vulkan_import)
     if any(options) and not all(options):
         parser.error('Vulkan builds require --cxx, --glslc, --vulkan-include and --vulkan-import together.')
+    if args.native_capture and not all(options):
+        parser.error('The native capture worker requires a Vulkan build.')
     build(args)

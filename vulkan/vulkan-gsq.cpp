@@ -61,17 +61,19 @@ static uint32_t integer(const wchar_t * value, unsigned max) {
 int wmain(int argc, wchar_t ** argv) try {
     if (argc!=12) throw std::runtime_error("usage: vulkan-gsq MODE INPUT OUTPUT SHADER BLOCKS STEPS SAMPLES BITS SEED TARGET REPEATS");
     const bool rco=std::wcscmp(argv[1],L"rco")==0;
-    if (!rco && std::wcscmp(argv[1],L"gsq")!=0) throw std::runtime_error("unknown mode");
+    const bool loss=std::wcscmp(argv[1],L"loss")==0;
+    if (!rco && !loss && std::wcscmp(argv[1],L"gsq")!=0) throw std::runtime_error("unknown mode");
     wchar_t * target_end=nullptr;
     const float target=std::wcstof(argv[10],&target_end);
     if (target_end==argv[10] || *target_end || !std::isfinite(target)) throw std::runtime_error("invalid target");
     const Parameters pc={integer(argv[5],rco?8:4096),integer(argv[6],128),integer(argv[7],32),
-                         integer(argv[8],4),integer(argv[9],UINT32_MAX),target};
+                         integer(argv[8],8),integer(argv[9],UINT32_MAX),target};
     const unsigned repeats=integer(argv[11],16);
-    if (!pc.blocks || !pc.samples || (rco && (pc.bits!=3 || pc.steps<2)) ||
-        (!rco && pc.bits<2) || repeats==0) throw std::runtime_error("parameters outside the supported range");
-    const size_t input_floats=size_t(pc.blocks)*(rco?pc.bits:256)*(1+pc.samples);
-    const size_t output_floats=rco ? pc.blocks+4+pc.blocks*pc.bits : size_t(pc.blocks)*266;
+    if (!pc.blocks || !pc.samples || (rco && ((pc.bits!=3 && pc.bits!=4) || pc.steps<2)) ||
+        (!rco && !loss && pc.bits!=2 && pc.bits!=3 && pc.bits!=4 && pc.bits!=6 && pc.bits!=8) ||
+        repeats==0) throw std::runtime_error("parameters outside the supported range");
+    const size_t input_floats=loss ? size_t(pc.blocks)*512 : size_t(pc.blocks)*(rco?pc.bits:256)*(1+pc.samples);
+    const size_t output_floats=loss ? pc.blocks : (rco ? pc.blocks+4+pc.blocks*pc.bits : size_t(pc.blocks)*266);
     const vk::DeviceSize input_size=input_floats*sizeof(float),output_size=output_floats*sizeof(float);
     std::ifstream input_file(std::filesystem::path(argv[2]),std::ios::binary|std::ios::ate);
     if (!input_file || input_file.tellg()!=std::streamoff(input_size)) throw std::runtime_error("input size mismatch");
