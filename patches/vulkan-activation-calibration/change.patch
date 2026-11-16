@@ -1,0 +1,655 @@
+diff --git a/README.md b/README.md
+index f220e6b..c2ed6b9 100644
+--- a/README.md
++++ b/README.md
+@@ -19,7 +19,7 @@ CPU instructions and GPU memory are detected for the information panel and memor
+ 
+ ## Vulkan GSQ-RCO preview
+ 
+-Enable **GSQ/RCO calibration** and open a media GGUF or a `gguf-gsq-rco-vulkan-v1` manifest. The bundled calibration uses Vulkan shaders on a supported AMD Polaris GPU. The media worker needs AVX2 to record activations. A matching local KoboldCpp profile supplies companion weights automatically, including when the selected GGUF is its text encoder. Direct GGUF selection calibrates two recognized attention projections. A manifest can cover up to eight matrices and supports Q3 through the CLI. [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO)
++Enable **Weight calibration** and open a media GGUF or a `gguf-gsq-rco-vulkan-v1` manifest. The bundled calibration uses Vulkan shaders on a supported AMD Polaris GPU. The media worker needs AVX2 to record activations. A matching local KoboldCpp profile supplies companion weights automatically, including when the selected GGUF is its text encoder. Mixed-layout GSQ/RCO from a directly selected GGUF calibrates two recognized attention projections. A manifest can cover up to eight matrices and supports Q3 through the CLI. [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO)
+ 
+ ```json
+ {
+@@ -45,7 +45,9 @@ The v1.3.0 RX 580 check covers automatic capture on ABDM and Wan, photo generati
+ 
+ ### Calibration with the original tensor layouts
+ 
+-Enable calibration and select the quantized file's current tier. Supply the matching F16, BF16 or F32 GGUF. In a manifest, `base` is the quantized file and `reference` is its higher-precision source. Supply 8–32 activation rows per matrix or use `capture` and `null`. Vulkan calibration learns candidate codes and scales. The converter keeps the original tensor types and payload size, accepting a tensor only when its held-out projection error falls. NVIDIA TensorRT INT8 uses its own graph-level quantization and deployment flow. [TensorRT quantization](https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/work-with-quantized-types.html)
++For a model dominated by Q4_0 or Q8_0, enable weight calibration and select the existing tier. Provide the matching GGUF or Safetensors checkpoint. `ACTCAL-Q4` and `ACTCAL-Q8` use activation-weighted least squares on Vulkan. Each candidate matrix is measured on 8–32 captured rows split into fitting and selection sets. The converter keeps tensor types, model metadata, and payload size. Check output quality separately on independent prompts.
++
++For the CLI, use `-q ACTCAL-Q4` or `-q ACTCAL-Q8` with a `gguf-activation-calibration-v1` manifest. Set `base`, `reference` and `capture` the same way as for GSQ/RCO. Under `targets`, use `"4": {"all": true}` or `"8": {"all": true}` to capture and fit every reachable Q4_0 and Q8_0 matrix. Use `tensors` with names mapped to `.npy` or `null` for explicit selections. Safetensors inputs support common floating formats, scaled INT8, and W4A8 INT4 with its codebook and scales. Same-tier K-quant GSQ uses a GGUF reference and the `GSQ-RCO` modes.
+ 
+ ## GSQ-RCO assembly
+ 
+diff --git a/README.ru.md b/README.ru.md
+index f800983..accb156 100644
+--- a/README.ru.md
++++ b/README.ru.md
+@@ -19,7 +19,7 @@ GPU, VRAM и инструкции CPU определяются для справ
+ 
+ ## GSQ-RCO на Vulkan
+ 
+-Включите **«Калибровка GSQ/RCO»** и задайте промпт. Встроенные шейдеры работают через Vulkan на поддерживаемой AMD Polaris, запись активаций также требует AVX2. Совпадающий профиль KoboldCpp автоматически подставит связанные веса, в том числе при выборе его энкодера. В таком режиме записываются две распознанные проекции. Манифест позволяет выбрать до восьми матриц и запустить Q3 через CLI. [Пример манифеста](README.md#vulkan-gsq-rco-preview) · [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO)
++Включите **«Калибровка весов»** и задайте промпт. Встроенные шейдеры работают через Vulkan на поддерживаемой AMD Polaris. Запись активаций требует AVX2. Совпадающий профиль KoboldCpp подставит связанные веса, в том числе при выборе его энкодера. GSQ/RCO со смешанными типами при выборе GGUF начинает с двух проекций. Манифест позволяет выбрать до восьми матриц и запустить Q3 через CLI. [Пример манифеста](README.md#vulkan-gsq-rco-preview) · [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO)
+ 
+ В манифесте укажите `.npy` с активациями или `null` для автозаписи. Для автозаписи нужен объект `capture` с полем `prompt`. Матрицы должны иметь ширину, кратную 256. Бюджет учитывает все тензоры GGUF. При `model_loss: true` программа выполняет целый тестовый рендер каждого кандидата и выбирает по MSE изображения или кадров. GSQ обучает выбранные матрицы, а RCO ограничивает список конфигураций бюджетом.
+ 
+@@ -29,7 +29,9 @@ GPU, VRAM и инструкции CPU определяются для справ
+ 
+ ### Калибровка с сохранением кванта
+ 
+-Включите калибровку и выберите текущий уровень кванта файла. Укажите GGUF F16, BF16 или F32 того же чекпойнта. В манифесте `base` указывает на квантованный файл, а `reference` — на точные веса. Нужны 8–32 строки активаций или настройки `capture` и `null`. Vulkan подбирает коды и масштабы. Типы и объём тензоров сохраняются, а вариант принимается только при меньшей ошибке на проверочных активациях. NVIDIA TensorRT INT8 использует собственный граф квантования. [Квантование TensorRT](https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/work-with-quantized-types.html)
++Для модели с преобладающим Q4_0 или Q8_0 включите калибровку и выберите её текущий квант. Укажите GGUF или Safetensors того же чекпойнта. `ACTCAL-Q4` и `ACTCAL-Q8` подбирают коды и масштабы методом взвешенных наименьших квадратов на Vulkan. Для каждой матрицы 8–32 строки активаций делятся на наборы для подгонки и отбора. Типы, объём тензоров и метаданные сохраняются. Качество результата проверяется на независимых промптах.
++
++Для CLI используйте `-q ACTCAL-Q4` или `-q ACTCAL-Q8` с манифестом `gguf-activation-calibration-v1`. В `targets` задайте `"4": {"all": true}` или `"8": {"all": true}` для автосбора по всем доступным матрицам Q4_0 и Q8_0. Поле `tensors` позволяет указать `.npy` или `null` по имени. Поддерживаются вещественные Safetensors, INT8 с масштабами и INT4 W4A8 с кодовой книгой и масштабами. GSQ с сохранением K-кванта использует исходник GGUF и режим `GSQ-RCO`.
+ 
+ ## Сборка GSQ-RCO
+ 
+diff --git a/activation_calibration.py b/activation_calibration.py
+new file mode 100644
+index 0000000..85a9223
+--- /dev/null
++++ b/activation_calibration.py
+@@ -0,0 +1,179 @@
++"""Activation-weighted Vulkan calibration of every observed Q4_0/Q8_0 matrix."""
++from contextlib import ExitStack
++from pathlib import Path
++import tempfile
++
++import numpy as np
++
++
++LAYOUTS = {'Q4_0': (4, 18), 'Q8_0': (8, 34)}
++PREFIXES = ('model.diffusion_model.', 'diffusion_model.')
++FLOATS = {'F32', 'F16', 'BF16', 'F8_E4M3', 'F8_E5M2'}
++
++
++def reference_rows(path, base, gguf_module, stack):
++    """Resolve known tensor aliases and return float rows, with explicit scale metadata."""
++    if path.suffix.lower() == '.gguf':
++        reader = gguf_module('gguf_reader').GGUFReader(path, 'r')
++        a, b = base.get_field('general.architecture'), reader.get_field('general.architecture')
++        if a is None or b is None or a.contents() != b.contents() or reader.endianess.name != 'LITTLE':
++            raise ValueError('Архитектура или порядок байтов исходного GGUF отличается.')
++        names = {t.name:t for t in reader.tensors}
++        decode = gguf_module('quants').dequantize
++        def gguf_rows(t, part):
++            ref = names.get(t.name)
++            if ref is None or tuple(ref.shape) != tuple(t.shape):
++                raise ValueError(f'Исходный GGUF не содержит совпадающий тензор {t.name}.')
++            return decode(ref.data[part], ref.tensor_type).astype(np.float32, copy=False)
++        return gguf_rows
++    if path.suffix.lower() not in ('.safetensors', '.sft'):
++        raise ValueError('Используйте GGUF или Safetensors в качестве исходника калибровки.')
++    from moss_convert import SafeFile, decode_rows
++    ref = SafeFile(path)
++    stack.callback(ref.data._mmap.close)
++    def safe_rows(t, part):
++        short=t.name
++        for prefix in PREFIXES:
++            short=short.removeprefix(prefix)
++        aliases=[t.name, short, *(p+short for p in PREFIXES)]
++        if t.name.startswith('model.'):
++            aliases.append('model.language_model.'+t.name.removeprefix('model.'))
++        key=next((name for name in aliases if name in ref.header), None)
++        if key is None:
++            raise ValueError(f'В исходных весах не найден {t.name}.')
++        info=ref.header[key]
++        layer=key.removesuffix('.weight')
++        scheme=ref.formats.get(layer,{})
++        form=scheme.get('format','')
++        packed=form=='asym_w4a8_int8'
++        shape=info['shape']
++        wanted=list(reversed(t.shape.tolist()))
++        if len(shape)!=2 or wanted!=[shape[0], shape[1]*(2 if packed else 1)]:
++            raise ValueError(f'Размеры исходного и целевого тензоров не совпадают у {t.name}.')
++        if form not in ('','asym_w4a8_int8','int8_tensorwise','float8_e4m3fn','float8_e5m2'):
++            raise ValueError(f'Для {key} нужен декодер схемы {form}.')
++        if packed:
++            if info['dtype'] not in ('I8','U8') or not all(layer+s in ref.header for s in ('.weight_codebook','.weight_s_rel','.weight_s_channel')):
++                raise ValueError(f'У {key} нет полного набора метаданных INT4 W4A8.')
++        elif info['dtype']=='I8':
++            if layer+'.weight_scale' not in ref.header:
++                raise ValueError(f'Для {key} нет масштаба INT8.')
++        elif info['dtype'] not in FLOATS:
++            raise ValueError(f'Неизвестный формат исходника {info["dtype"]} у {key}.')
++        if any(layer+s in ref.header for s in ('.weight_scale_inv','.scale_weight')):
++            raise ValueError(f'У {key} нужен поддерживаемый формат масштаба weight_scale.')
++        return decode_rows(ref,key,part,scheme)
++    return safe_rows
++
++
++def solve(converter, root, helper, weights, importance, old, bits, steps):
++    """Vulkan blockwise weighted scale/code search with host packing of FP16 scales."""
++    blocks=len(old)
++    raw=old.reshape(blocks,-1)
++    scales=raw[:,:2].copy().view('<f2').ravel()
++    data=root/'input.bin'
++    result=root/'output.bin'
++    with data.open('wb') as f:
++        weights.astype('<f4',copy=False).tofile(f)
++        importance.astype('<f4',copy=False).tofile(f)
++        scales.astype('<f4').tofile(f)
++    converter.run(helper,'actcal',data,result,helper.with_name('actcal.spv'),
++                  blocks,steps,len(importance)//32,bits,0,0,1)
++    words=5 if bits==4 else 9
++    encoded=np.fromfile(result,dtype='<u4')
++    if encoded.size!=blocks*words:
++        raise RuntimeError('Неполный результат Vulkan-калибровки.')
++    encoded=encoded.reshape(blocks,words)
++    scale=encoded[:,0].copy().view('<f4').astype('<f2')
++    if not np.isfinite(scale).all():
++        raise RuntimeError('Неконечный масштаб Vulkan-калибровки.')
++    return np.concatenate((scale.reshape(-1,1).view(np.uint8),encoded[:,1:].copy().view(np.uint8)),axis=1)
++
++
++def optimize_full(converter, manifest, base, reference, target, output, gguf_module, *, capture, detect,
++                  evidence=None, binaries=None):
++    if base.endianess.name!='LITTLE':
++        raise ValueError('Требуется little-endian GGUF.')
++    steps=target.get('steps',3)
++    if type(steps) is not int or not 1<=steps<=8:
++        raise ValueError('Калибровка принимает от одного до восьми шагов.')
++    specs=target.get('tensors')
++    all_weights=target.get('all') is True
++    if not all_weights and (not isinstance(specs,dict) or not specs):
++        raise ValueError('Нужен список тензоров/активаций или all: true для автозаписи.')
++    weights={t.name:t for t in base.tensors}
++    if specs and set(specs)-weights.keys():
++        raise ValueError('В манифесте есть неизвестные тензоры.')
++    entries=[t for t in base.tensors if (all_weights or t.name in specs)
++             and t.tensor_type.name in LAYOUTS and len(t.shape)==2 and int(t.shape[0])%32==0]
++    if not entries or not all_weights and len(entries)!=len(specs):
++        raise ValueError('Нужны матрицы Q4_0/Q8_0, у которых ширина кратна 32.')
++    helper=(binaries or Path(__file__).resolve().parent/'vulkan')/'vulkan-gsq.exe'
++    decode=gguf_module('quants').dequantize
++    with tempfile.TemporaryDirectory(prefix='.gguf-full-cal-',dir=output.parent) as temp, ExitStack() as maps:
++        root=Path(temp)
++        ref=reference_rows(reference,base,gguf_module,maps)
++        found={}
++        automatic=[t.name for t in entries if all_weights or specs[t.name] is None]
++        if automatic:
++            from native_capture import collect
++            directory=root/'activation'
++            directory.mkdir()
++            found,_,_=collect(converter,manifest,Path(base.data.filename),capture,automatic,
++                               directory,detect,require_all=False)
++        replacements={}
++        measured={}
++        for index,t in enumerate(entries):
++            path=found.get(t.name)
++            if path is None:
++                if all_weights or specs[t.name] is None:
++                    continue
++                relative=specs[t.name]
++                if not isinstance(relative,str) or Path(relative).suffix!='.npy':
++                    raise ValueError(f'{t.name}: нужны активации .npy.')
++                path=(manifest.parent/relative).resolve(strict=True)
++            x=np.load(path,allow_pickle=False)
++            width,rows=map(int,t.shape)
++            if not isinstance(x,np.ndarray) or x.ndim!=2 or x.shape[1]!=width or not 8<=len(x)<=32 or not np.isfinite(x).all():
++                raise ValueError(f'{t.name}: ожидаются 8–32 строки активаций шириной {width}.')
++            x=x.astype(np.float32)
++            count=len(x)*3//4
++            importance=(x[:count]**2).mean(axis=0)
++            if float(importance.max())==0:
++                continue
++            importance=np.maximum(importance/importance.max(),1e-6)
++            holdout=np.ascontiguousarray(x[count:].T)
++            candidate=np.memmap(root/f'{index}.bin',mode='w+',dtype='uint8',shape=t.data.shape)
++            maps.callback(candidate._mmap.close)
++            bits,packed_bytes=LAYOUTS[t.tensor_type.name]
++            chunk=max(1,8*1024*1024//width)
++            before=after=0.0
++            converter.stage(f'Калибровка {index+1}/{len(entries)} · {t.tensor_type.name}',0,rows)
++            for start in range(0,rows,chunk):
++                part=slice(start,min(rows,start+chunk))
++                reference_values=np.ascontiguousarray(ref(t,part),dtype=np.float32)
++                n=len(reference_values)
++                old=t.data[part].reshape(-1,packed_bytes)
++                packed=solve(converter,root,helper,reference_values,importance,old,bits,steps)
++                expected=reference_values @ holdout
++                old_loss=((decode(old,t.tensor_type).reshape(n,width) @ holdout-expected)**2).sum(axis=1)
++                new_loss=((decode(packed,t.tensor_type).reshape(n,width) @ holdout-expected)**2).sum(axis=1)
++                choose=(new_loss < old_loss)
++                old_rows=old.reshape(n,-1)
++                new_rows=packed.reshape(n,-1)
++                candidate[part]=np.where(choose[:,None],new_rows,old_rows)
++                before+=float(old_loss.sum(dtype=np.float64))
++                after+=float(np.minimum(old_loss,new_loss).sum(dtype=np.float64))
++                converter.stage(f'Калибровка {index+1}/{len(entries)} · {t.tensor_type.name}',part.stop,rows)
++            measured[t.name]=dict(before=before,after=after,changed=after<before,bytes=t.n_bytes)
++            if after<before:
++                replacements[t.name]=candidate,t.tensor_type
++            converter.log(f'{t.name} · {t.tensor_type.name} · {before:.6g} → {after:.6g}')
++        if not measured:
++            raise ValueError('В калибровочном запросе не было пригодных активаций для выбранных матриц.')
++        summary=dict(eligible=len(entries),observed=len(measured),changed=len(replacements),
++                     unobserved=[t.name for t in entries if t.name not in measured],tensors=measured)
++        if evidence is not None:
++            evidence.update(summary)
++        converter.log(f'Матриц обработано {len(measured)}/{len(entries)}, улучшилось {len(replacements)}.')
++        return converter.write_mixed_gguf(base,output,replacements,preserve_file_type=True)
+diff --git a/convert.py b/convert.py
+index e9b778f..e0b918b 100644
+--- a/convert.py
++++ b/convert.py
+@@ -40,7 +40,9 @@ GPU_TARGETS = {
+ }
+ CPU_TARGETS = {'auto': 'Универсальный GGUF', 'avx': 'AVX', 'avx2': 'AVX2'}
+ GSQ_RCO = ('GSQ-RCO-Q2', 'GSQ-RCO-Q3', 'GSQ-RCO-Q4', 'GSQ-RCO-Q6', 'GSQ-RCO-Q8')
+-QUANTIZATIONS = (*FORMATS, *FORMATS.values(), 'Q4_0', *GSQ_RCO)
++ACTIVATION_FORMATS = ('ACTCAL-Q4', 'ACTCAL-Q8')
++CALIBRATIONS = (*GSQ_RCO, *ACTIVATION_FORMATS)
++QUANTIZATIONS = (*FORMATS, *FORMATS.values(), 'Q4_0', *CALIBRATIONS)
+ SAFETENSORS = {'.safetensors', '.sft'}
+ MODES = {
+     'auto': 'Авто',
+@@ -79,7 +81,7 @@ def suggested_output(source, quantization='Q8_0'):
+ def output_quantization(quantization, gpu='auto', cpu='auto'):
+     if gpu not in GPU_TARGETS or cpu not in CPU_TARGETS:
+         raise ValueError('Неизвестная цель GPU или CPU.')
+-    if quantization in GSQ_RCO and (gpu != 'auto' or cpu != 'auto'):
++    if quantization in CALIBRATIONS and (gpu != 'auto' or cpu != 'auto'):
+         raise ValueError('GSQ/RCO выбирает типы по бюджету. Для этого режима оставьте цели GPU и CPU универсальными.')
+     if quantization == 'Q4' and (gpu in ('polaris', 'pascal') or cpu != 'auto'):
+         return 'Q4_0'
+@@ -434,7 +436,7 @@ class Conversion:
+             writer.close()
+         return result
+ 
+-    def assemble_gsq_rco(self, manifest, output, bits):
++    def assemble_gsq_rco(self, manifest, output, bits, *, activation=False):
+         """Assemble prepared variants or calibrate selected tensors on Vulkan."""
+         if manifest.suffix.lower() != '.json' or not manifest.is_file():
+             raise ValueError('Для сборки GSQ-RCO выберите JSON-манифест оптимизированных тензоров.')
+@@ -444,11 +446,15 @@ class Conversion:
+                 raise ValueError('В манифесте GSQ-RCO повторяется ключ.')
+             return result
+         plan = json.loads(manifest.read_text(encoding='utf-8-sig'), object_pairs_hook=unique_pairs)
+-        if not isinstance(plan, dict) or plan.get('format') not in ('gguf-gsq-rco-v1', 'gguf-gsq-rco-vulkan-v1'):
+-            raise ValueError('Ожидается манифест gguf-gsq-rco-v1 или gguf-gsq-rco-vulkan-v1.')
++        if not isinstance(plan, dict) or plan.get('format') not in ('gguf-gsq-rco-v1', 'gguf-gsq-rco-vulkan-v1', 'gguf-activation-calibration-v1'):
++            raise ValueError('Неизвестный формат манифеста калибровки.')
+         targets = plan.get('targets')
+         target = targets.get(str(bits)) if isinstance(targets, dict) else None
+-        if not isinstance(target, dict) or not isinstance(target.get('tensors'), dict) or not target['tensors']:
++        full = plan['format'] == 'gguf-activation-calibration-v1'
++        if activation != full:
++            raise ValueError('Для манифеста сохранения Q4_0/Q8_0 выберите ACTCAL-Q4 или ACTCAL-Q8.')
++        if not isinstance(target, dict) or (not (full and target.get('all') is True)
++                and (not isinstance(target.get('tensors'), dict) or not target['tensors'])):
+             raise ValueError(f'В манифесте отсутствуют назначения тензоров для Q{bits}.')
+         def local_gguf(relative):
+             if not isinstance(relative, str):
+@@ -461,6 +467,18 @@ class Conversion:
+                 raise ValueError('Для сборки GSQ-RCO используйте цельные GGUF.')
+             return reader
+ 
++        if full:
++            if not isinstance(plan.get('reference'), str):
++                raise ValueError('Укажите исходные веса в reference.')
++            reference = (manifest.parent / plan['reference']).resolve(strict=True)
++            sys.path.insert(0,str(HERE))
++            try:
++                from activation_calibration import optimize_full
++                return optimize_full(self,manifest,local_gguf(plan.get('base')),reference,target,output,gguf_module,
++                                     capture=plan.get('capture'),detect=route)
++            finally:
++                sys.path.pop(0)
++
+         if plan['format'] == 'gguf-gsq-rco-vulkan-v1':
+             sys.path.insert(0, str(HERE))
+             try:
+@@ -575,10 +593,7 @@ class Conversion:
+         if quantization not in QUANTIZATIONS:
+             raise ValueError(f'Неизвестный формат GGUF {quantization}.')
+         self.stage('Чтение модели')
+-        if quantization in GSQ_RCO:
+-            gpu, cpu = gpu or 'auto', cpu or 'auto'
+-        else:
+-            gpu, cpu = gpu or 'auto', cpu or 'auto'
++        gpu, cpu = gpu or 'auto', cpu or 'auto'
+         quantization = output_quantization(quantization, gpu, cpu)
+         source = Path(os.path.abspath(USER_DIRECTORY / Path(source).expanduser()))
+         if not source.exists():
+@@ -589,8 +604,8 @@ class Conversion:
+         output = output.parent.resolve(strict=True) / output.name
+         if os.path.lexists(output):
+             raise FileExistsError(f'Файл уже существует. Выберите другое имя: {output}')
+-        if quantization in GSQ_RCO:
+-            return self.assemble_gsq_rco(source, output, int(quantization[-1]))
++        if quantization in CALIBRATIONS:
++            return self.assemble_gsq_rco(source, output, int(quantization[-1]), activation=quantization in ACTIVATION_FORMATS)
+         source, mode, detected = route(source, mode)
+         expand = False
+         if mode in ('diffusion', 'moss-image', 'moss-text'):
+@@ -735,17 +750,27 @@ def installed_capture_profile(source):
+     return None, 'sdmodel'
+ 
+ 
+-def quantized_tier(path):
++def dominant_quantization(path):
+     families = {'Q2_K':2,'Q3_K':3,'Q4_K':4,'Q4_0':4,'Q6_K':6,'Q8_0':8}
+     counts = Counter()
++    tiers = Counter()
+     for tensor in open_gguf(path).tensors:
+-        if tensor.tensor_type.name in families:
+-            counts[families[tensor.tensor_type.name]] += tensor.n_bytes
+-    return counts.most_common(1)[0][0] if counts else None
++        layout = tensor.tensor_type.name
++        if layout in families:
++            counts[layout] += tensor.n_bytes
++            tiers[families[layout]] += tensor.n_bytes
++    if not tiers:
++        return None, None
++    tier = tiers.most_common(1)[0][0]
++    layout = next(name for name, _ in counts.most_common() if families[name] == tier)
++    return layout, tier
+ 
+ 
+-def automatic_gsq_plan(source, tier, prompt, profile, reference=None):
+-    reader = open_gguf(source)
++def quantized_tier(path):
++    return dominant_quantization(path)[1]
++
++
++def automatic_gsq_plan(source, tier, prompt, profile, reference=None, *, activation=False):
+     _, _, role = route(source, 'auto')
+     inferred, part = installed_capture_profile(source)
+     if profile is None:
+@@ -754,6 +779,16 @@ def automatic_gsq_plan(source, tier, prompt, profile, reference=None):
+         part = part if part != 'sdmodel' else 'sdclip1'
+     elif role not in ('Фото', 'Видео', 'Диффузионная модель'):
+         raise ValueError('Для автозаписи нужен GGUF диффузора или энкодер с профилем .kcpps.')
++    capture = {'prompt': prompt, 'base_part': part}
++    if profile:
++        parent = profile.parent
++        capture.update(profile=str(profile), profile_root=str(parent.parent if parent.name == 'profiles' else parent))
++    if activation:
++        return {'format':'gguf-activation-calibration-v1', 'base':str(source), 'reference':str(reference),
++                'capture':capture, 'targets':{str(tier):{'all':True, 'steps':3}}}
++    if reference is not None and reference.suffix.lower() != '.gguf':
++        raise ValueError('GSQ с сохранением блочного K-кванта принимает исходные веса GGUF.')
++    reader = open_gguf(source)
+     # ponytail: start with two attention projections; use a manifest to choose other matrices.
+     choices = [t for t in reader.tensors if len(t.shape) == 2 and int(t.shape[0]) % 256 == 0
+                and re.search(r'(?:self_attn\.[qkv]|proj\.qkv|proj\.o|attn[12]\.to_[qkv]|attn_qkv|q_proj|qkv|in_proj_z)\.weight$', t.name)]
+@@ -767,10 +802,6 @@ def automatic_gsq_plan(source, tier, prompt, profile, reference=None):
+     qtype = kind.GGMLQuantizationType[FORMATS[f'Q{tier}']]
+     block, size = kind.GGML_QUANT_SIZES[qtype]
+     budget = sum(t.n_bytes for t in reader.tensors) + sum(t.n_elements // block * size - t.n_bytes for t in choices)
+-    capture = {'prompt': prompt, 'base_part': part}
+-    if profile:
+-        parent = profile.parent
+-        capture.update(profile=str(profile), profile_root=str(parent.parent if parent.name == 'profiles' else parent))
+     plan = {'format': 'gguf-gsq-rco-vulkan-v1', 'base': str(source), 'model_loss': reference is None, 'capture': capture,
+             'targets': {str(tier): {'max_tensor_bytes': budget, 'tensors': {t.name: None for t in choices}}}}
+     if reference is not None:
+@@ -806,7 +837,19 @@ def gui(source=''):
+ 
+     def selection():
+         value = quantization_value.get()
+-        return 'GSQ-RCO-' + value if optimize_value.get() else value
++        if not optimize_value.get():
++            return value
++        item = USER_DIRECTORY / Path(input_value.get().strip().strip('"')).expanduser()
++        try:
++            if item.suffix.lower() == '.json' and json.loads(item.read_text(encoding='utf-8-sig')).get('format') == 'gguf-activation-calibration-v1':
++                return 'ACTCAL-' + value
++            if item.suffix.lower() == '.gguf':
++                layout, tier = dominant_quantization(item)
++                if layout in ('Q4_0','Q8_0') and value == f'Q{tier}':
++                    return 'ACTCAL-' + value
++        except (OSError, ValueError, TypeError, KeyError, AttributeError):
++            pass
++        return 'GSQ-RCO-' + value
+ 
+     def refresh(*_):
+         nonlocal guessed
+@@ -819,7 +862,7 @@ def gui(source=''):
+             kind_value.set('Автоматически')
+             return
+         if path.suffix.lower() == '.json':
+-            kind_value.set('Манифест GSQ/RCO')
++            kind_value.set('Манифест калибровки')
+         else:
+             try:
+                 kind_value.set(route(path, 'auto')[2])
+@@ -935,7 +978,8 @@ def gui(source=''):
+                 return
+             if preserve:
+                 chosen = filedialog.askopenfilename(parent=window, initialdir=original.parent,
+-                    title='Исходные веса этой модели в GGUF F16, BF16 или F32', filetypes=[('GGUF', '*.gguf')])
++                    title='Исходные веса этой модели', filetypes=([('GGUF / Safetensors', '*.gguf *.safetensors *.sft')]
++                        if quantization in ACTIVATION_FORMATS else [('GGUF', '*.gguf')]))
+                 if not chosen:
+                     return
+                 reference = Path(chosen).resolve(strict=True)
+@@ -965,7 +1009,8 @@ def gui(source=''):
+                     original = (USER_DIRECTORY / Path(source).expanduser()).resolve(strict=True)
+                     with tempfile.TemporaryDirectory(prefix='gguf-plan-') as temp:
+                         plan = Path(temp) / 'capture.json'
+-                        payload = automatic_gsq_plan(original, int(quantization[-1]), prompt, profile, reference)
++                        payload = automatic_gsq_plan(original, int(quantization[-1]), prompt, profile, reference,
++                                                     activation=quantization in ACTIVATION_FORMATS)
+                         plan.write_text(json.dumps(payload, ensure_ascii=False), encoding='utf-8')
+                         job.convert(plan, output or suggested_output(original, quantization), quantization=quantization)
+                 else:
+@@ -1049,7 +1094,7 @@ def gui(source=''):
+     format_box.grid(row=3, column=1, sticky='w', padx=4)
+     format_box.bind('<<ComboboxSelected>>', refresh)
+     ttk.Label(window, textvariable=format_value).grid(row=2, column=2, columnspan=2, sticky='w', padx=4)
+-    ttk.Checkbutton(window, text='Калибровка GSQ/RCO', variable=optimize_value, command=refresh).grid(row=3, column=2, columnspan=2, sticky='w', padx=4)
++    ttk.Checkbutton(window, text='Калибровка весов', variable=optimize_value, command=refresh).grid(row=3, column=2, columnspan=2, sticky='w', padx=4)
+     ttk.Label(window, text='Оборудование').grid(row=4, column=0, sticky='w', padx=8)
+     ttk.Label(window, textvariable=hardware_value, wraplength=660).grid(row=4, column=1, columnspan=3, sticky='w', padx=4, pady=3)
+     ttk.Label(window, textvariable=advice_value, wraplength=660).grid(row=5, column=1, columnspan=3, sticky='w', padx=4, pady=3)
+diff --git a/native_capture.py b/native_capture.py
+index cc8a18e..6783fcf 100644
+--- a/native_capture.py
++++ b/native_capture.py
+@@ -138,8 +138,8 @@ def worker(converter, settings, directory, activations):
+             process.wait(timeout=30)
+ 
+ 
+-def collect(converter, manifest, reference, recipe, names, directory, detect):
+-    if any(re.fullmatch(r'[A-Za-z0-9_.-]{1,200}', name) is None for name in names):
++def collect(converter, manifest, reference, recipe, names, directory, detect, *, require_all=True):
++    if len(names) > 4096 or any(re.fullmatch(r'[A-Za-z0-9_.-]{1,200}', name) is None for name in names):
+         raise ValueError('Имена выбранных тензоров несовместимы с автозаписью.')
+     (directory / 'tensors.txt').write_text('\n'.join(names) + '\n', encoding='ascii')
+     settings, _, prompt, seed = runtime_config(recipe, manifest, reference)
+@@ -153,10 +153,12 @@ def collect(converter, manifest, reference, recipe, names, directory, detect):
+     for i, name in enumerate(names):
+         path = directory / f'{i}.f32'
+         if not path.is_file():
++            if not require_all:
++                continue
+             raise ValueError(f'Во время генерации не найдены активации {name}.')
+         with path.open('rb') as data:
+             shape = tuple(map(int, np.fromfile(data, dtype='<u4', count=2)))
+-            if len(shape) != 2 or not 2 <= shape[0] <= 32 or not 256 <= shape[1] <= 65536:
++            if len(shape) != 2 or not 2 <= shape[0] <= 32 or not 32 <= shape[1] <= 65536:
+                 raise ValueError(f'Некорректный размер активаций {name}.')
+             rows = np.fromfile(data, dtype='<f4').reshape(shape)
+         if not np.isfinite(rows).all():
+diff --git a/portable_build.py b/portable_build.py
+index d4e79ef..3fdfb24 100644
+--- a/portable_build.py
++++ b/portable_build.py
+@@ -112,7 +112,7 @@ def included(relative):
+ def build_vulkan(args, destination):
+     destination.mkdir()
+     source = HERE / 'vulkan'
+-    for mode in ('gsq', 'rco', 'loss'):
++    for mode in ('gsq', 'rco', 'loss', 'actcal'):
+         subprocess.run([str(args.glslc), '--target-env=vulkan1.1', '-O',
+                         str(source / f'{mode}.comp'), '-o', str(destination / f'{mode}.spv')], check=True)
+     subprocess.run([str(args.cxx), '-std=c++17', '-O2', '-municode', '-static', '-static-libgcc', '-static-libstdc++',
+@@ -152,7 +152,7 @@ def build(args):
+         for engine in ('llama', 'sd'):
+             copy_crt(crt, backends / engine)
+         shutil.copytree(args.hf, backends / 'hf', ignore=shutil.ignore_patterns('__pycache__', 'tests', 'examples'))
+-        for filename in ('convert.py', 'hardware.py', 'gpu_adapter.py', 'hf.py', 'moss_convert.py', 'media_weights.py', 'vulkan_workflow.py', 'native_capture.py',
++        for filename in ('convert.py', 'hardware.py', 'gpu_adapter.py', 'hf.py', 'moss_convert.py', 'media_weights.py', 'vulkan_workflow.py', 'native_capture.py', 'activation_calibration.py',
+                          'LICENSE.md', 'NOTICE.md'):
+             shutil.copyfile(HERE / filename, app / filename)
+         shutil.copytree(HERE / 'licenses', app / 'licenses')
+diff --git a/vulkan/actcal.comp b/vulkan/actcal.comp
+new file mode 100644
+index 0000000..11346c3
+--- /dev/null
++++ b/vulkan/actcal.comp
+@@ -0,0 +1,63 @@
++#version 450
++layout(local_size_x=64) in;
++layout(binding=0,std430) readonly buffer Inputs { float source[]; };
++layout(binding=1,std430) writeonly buffer Output { uint encoded[]; };
++layout(push_constant) uniform Config {
++    uint blocks;
++    uint steps;
++    uint columns_blocks;
++    uint bits;
++    uint seed;
++    float target;
++} pc;
++
++float quantize(float weight,float scale,float low,float high) {
++    return abs(scale)<1e-20 ? 0.0 : clamp(roundEven(weight/scale),low,high);
++}
++
++void main() {
++    uint block=gl_GlobalInvocationID.x;
++    if (block>=pc.blocks) return;
++    uint begin=block*32u;
++    uint channel=pc.blocks*32u+(block%pc.columns_blocks)*32u;
++    uint stride=pc.bits==4u ? 5u : 9u;
++    float low=pc.bits==4u ? -8.0 : -128.0;
++    float high=pc.bits==4u ? 7.0 : 127.0;
++    float original=source[pc.blocks*32u+pc.columns_blocks*32u+block];
++    float peak=0.0;
++    for(uint i=0u;i<32u;++i) peak=max(peak,abs(source[begin+i]));
++    float initial=peak/high;
++    float best=original, best_loss=3.40282e38;
++    for(uint seed=0u;seed<3u;++seed) {
++        float d=seed==0u ? original : (seed==1u ? initial : -(peak / -low));
++        for(uint step=0u;step<=pc.steps;++step) {
++            float loss=0.0,numerator=0.0,denominator=0.0;
++            for(uint i=0u;i<32u;++i) {
++                float w=source[begin+i],p=source[channel+i],q=quantize(w,d,low,high);
++                float residual=w-q*d;
++                loss+=p*residual*residual;
++                numerator+=p*w*q;
++                denominator+=p*q*q;
++            }
++            if(loss<best_loss) { best_loss=loss; best=d; }
++            if(denominator<1e-16) break;
++            d=numerator/denominator;
++        }
++    }
++    uint offset=block*stride;
++    encoded[offset]=floatBitsToUint(best);
++    for(uint word=0u;word<stride-1u;++word) {
++        uint packed=0u;
++        for(uint b=0u;b<4u;++b) {
++            uint i=word*4u+b;
++            int l=int(quantize(source[begin+i],best,low,high));
++            uint code;
++            if(pc.bits==4u) {
++                int h=int(quantize(source[begin+i+16u],best,low,high));
++                code=uint(l+8) | (uint(h+8)<<4u);
++            } else code=uint(l)&255u;
++            packed|=code<<(b*8u);
++        }
++        encoded[offset+1u+word]=packed;
++    }
++}
+diff --git a/vulkan/native_capture.inc b/vulkan/native_capture.inc
+index a18f633..00f89ee 100644
+--- a/vulkan/native_capture.inc
++++ b/vulkan/native_capture.inc
+@@ -9,15 +9,17 @@ static bool gsq_capture_activation(ggml_tensor * node, bool ask, void * director
+     if (node->op != GGML_OP_MUL_MAT || !node->src[0] || !node->src[1]) return !ask;
+     const auto * weight = node->src[0];
+     const auto * input = node->src[1];
+-    if (weight->view_src != nullptr || input->type != GGML_TYPE_F32 || !ggml_is_contiguous(input) ||
+-        input->ne[0] != weight->ne[0] || input->ne[0] < 256 || input->ne[0] > 65536 ||
+-        input->ne[0] % 256 || ggml_nrows(input) < 2) return !ask;
++    const bool f32 = input->type == GGML_TYPE_F32;
++    const bool f16 = input->type == GGML_TYPE_F16;
++    if (weight->view_src != nullptr || (!f32 && !f16) || input->nb[0] != (f32 ? sizeof(float) : sizeof(ggml_fp16_t)) ||
++        input->ne[0] != weight->ne[0] || input->ne[0] < 32 || input->ne[0] > 65536 ||
++        input->ne[0] % 32 || ggml_nrows(input) < 2) return !ask;
+ 
+     const auto root = std::filesystem::u8path(static_cast<const char *>(directory));
+     static const std::vector<std::string> names = [&root] {
+         std::ifstream plan(root / "tensors.txt");
+         std::vector<std::string> lines;
+-        for (std::string name; lines.size() < 8 && std::getline(plan, name);) {
++        for (std::string name; lines.size() < 4096 && std::getline(plan, name);) {
+             if (!name.empty() && name.back() == '\r') name.pop_back();
+             if (!name.empty()) lines.push_back(name);
+         }
+@@ -34,11 +36,18 @@ static bool gsq_capture_activation(ggml_tensor * node, bool ask, void * director
+         const uint32_t count = static_cast<uint32_t>(std::min<int64_t>(32, ggml_nrows(input)));
+         const uint32_t width = static_cast<uint32_t>(input->ne[0]);
+         std::vector<float> values(static_cast<size_t>(count) * width);
+-        const size_t row_bytes = static_cast<size_t>(width) * sizeof(float);
++        std::vector<ggml_fp16_t> half(f16 ? width : 0);
+         for (uint32_t row = 0; row < count; ++row) {
+             const size_t from = static_cast<size_t>(row * (ggml_nrows(input) - 1) / (count - 1));
+-            ggml_backend_tensor_get(input, values.data() + static_cast<size_t>(row) * width,
+-                                    from * row_bytes, row_bytes);
++            const size_t in_plane = from / input->ne[1];
++            const size_t offset = (from % input->ne[1]) * input->nb[1] + (in_plane % input->ne[2]) * input->nb[2]
++                                  + (in_plane / input->ne[2]) * input->nb[3];
++            auto * dst = values.data() + static_cast<size_t>(row) * width;
++            if (f32) ggml_backend_tensor_get(input, dst, offset, width * sizeof(float));
++            else {
++                ggml_backend_tensor_get(input, half.data(), offset, width * sizeof(ggml_fp16_t));
++                ggml_fp16_to_fp32_row(half.data(), dst, width);
++            }
+         }
+         std::ofstream stream(root / (std::to_string(i) + ".f32"), std::ios::binary);
+         const uint32_t shape[] = {count, width};
+diff --git a/vulkan/vulkan-gsq.cpp b/vulkan/vulkan-gsq.cpp
+index bd3d051..265f687 100644
+--- a/vulkan/vulkan-gsq.cpp
++++ b/vulkan/vulkan-gsq.cpp
+@@ -108,18 +108,20 @@ int wmain(int argc, wchar_t ** argv) try {
+     if (argc!=12) throw std::runtime_error("usage: vulkan-gsq MODE INPUT OUTPUT SHADER BLOCKS STEPS SAMPLES BITS SEED TARGET REPEATS");
+     const bool rco=std::wcscmp(argv[1],L"rco")==0;
+     const bool loss=std::wcscmp(argv[1],L"loss")==0;
+-    if (!rco && !loss && std::wcscmp(argv[1],L"gsq")!=0) throw std::runtime_error("unknown mode");
++    const bool actcal=std::wcscmp(argv[1],L"actcal")==0;
++    if (!rco && !loss && !actcal && std::wcscmp(argv[1],L"gsq")!=0) throw std::runtime_error("unknown mode");
+     wchar_t * target_end=nullptr;
+     const float target=std::wcstof(argv[10],&target_end);
+     if (target_end==argv[10] || *target_end || !std::isfinite(target)) throw std::runtime_error("invalid target");
+-    const Parameters pc={integer(argv[5],rco?8:4096),integer(argv[6],128),integer(argv[7],32),
++    const Parameters pc={integer(argv[5],actcal?262144:(rco?8:4096)),integer(argv[6],actcal?8:128),integer(argv[7],actcal?2048:32),
+                          integer(argv[8],8),integer(argv[9],UINT32_MAX),target};
+     const unsigned repeats=integer(argv[11],16);
+     if (!pc.blocks || !pc.samples || (rco && ((pc.bits!=3 && pc.bits!=4) || pc.steps<2)) ||
+-        (!rco && !loss && pc.bits!=2 && pc.bits!=3 && pc.bits!=4 && pc.bits!=6 && pc.bits!=8) ||
++        (actcal && (pc.bits!=4 && pc.bits!=8)) ||
++        (!rco && !loss && !actcal && pc.bits!=2 && pc.bits!=3 && pc.bits!=4 && pc.bits!=6 && pc.bits!=8) ||
+         repeats==0) throw std::runtime_error("parameters outside the supported range");
+-    const size_t input_floats=loss ? size_t(pc.blocks)*512 : size_t(pc.blocks)*(rco?pc.bits:256)*(1+pc.samples);
+-    const size_t output_floats=loss ? pc.blocks : (rco ? pc.blocks+4+pc.blocks*pc.bits : size_t(pc.blocks)*266);
++    const size_t input_floats=actcal ? size_t(pc.blocks)*33+pc.samples*32 : (loss ? size_t(pc.blocks)*512 : size_t(pc.blocks)*(rco?pc.bits:256)*(1+pc.samples));
++    const size_t output_floats=actcal ? size_t(pc.blocks)*(pc.bits==4?5:9) : (loss ? pc.blocks : (rco ? pc.blocks+4+pc.blocks*pc.bits : size_t(pc.blocks)*266));
+     const vk::DeviceSize input_size=input_floats*sizeof(float),output_size=output_floats*sizeof(float);
+     std::ifstream input_file(std::filesystem::path(argv[2]),std::ios::binary|std::ios::ate);
+     if (!input_file || input_file.tellg()!=std::streamoff(input_size)) throw std::runtime_error("input size mismatch");
+@@ -220,7 +222,7 @@ int wmain(int argc, wchar_t ** argv) try {
+         cmd.bindPipeline(vk::PipelineBindPoint::eCompute,*pipeline);
+         cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute,*pl,0,set,{});
+         cmd.pushConstants(*pl,vk::ShaderStageFlagBits::eCompute,0,sizeof(pc),&pc);
+-        cmd.dispatch(rco?1:pc.blocks,1,1);
++        cmd.dispatch(actcal?(pc.blocks+63)/64:(rco?1:pc.blocks),1,1);
+         cmd.writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe,*queries,1);
+         barrier(compute,transfer,vk::AccessFlagBits::eShaderWrite,vk::AccessFlagBits::eTransferRead);
+         cmd.copyBuffer(*b.buffer,*staged.buffer,vk::BufferCopy(0,0,output_size));

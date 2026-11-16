@@ -138,8 +138,8 @@ def worker(converter, settings, directory, activations):
             process.wait(timeout=30)
 
 
-def collect(converter, manifest, reference, recipe, names, directory, detect):
-    if any(re.fullmatch(r'[A-Za-z0-9_.-]{1,200}', name) is None for name in names):
+def collect(converter, manifest, reference, recipe, names, directory, detect, *, require_all=True):
+    if len(names) > 4096 or any(re.fullmatch(r'[A-Za-z0-9_.-]{1,200}', name) is None for name in names):
         raise ValueError('Имена выбранных тензоров несовместимы с автозаписью.')
     (directory / 'tensors.txt').write_text('\n'.join(names) + '\n', encoding='ascii')
     settings, _, prompt, seed = runtime_config(recipe, manifest, reference)
@@ -153,10 +153,12 @@ def collect(converter, manifest, reference, recipe, names, directory, detect):
     for i, name in enumerate(names):
         path = directory / f'{i}.f32'
         if not path.is_file():
+            if not require_all:
+                continue
             raise ValueError(f'Во время генерации не найдены активации {name}.')
         with path.open('rb') as data:
             shape = tuple(map(int, np.fromfile(data, dtype='<u4', count=2)))
-            if len(shape) != 2 or not 2 <= shape[0] <= 32 or not 256 <= shape[1] <= 65536:
+            if len(shape) != 2 or not 2 <= shape[0] <= 32 or not 32 <= shape[1] <= 65536:
                 raise ValueError(f'Некорректный размер активаций {name}.')
             rows = np.fromfile(data, dtype='<f4').reshape(shape)
         if not np.isfinite(rows).all():

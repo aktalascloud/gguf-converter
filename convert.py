@@ -40,7 +40,9 @@ GPU_TARGETS = {
 }
 CPU_TARGETS = {'auto': 'Универсальный GGUF', 'avx': 'AVX', 'avx2': 'AVX2'}
 GSQ_RCO = ('GSQ-RCO-Q2', 'GSQ-RCO-Q3', 'GSQ-RCO-Q4', 'GSQ-RCO-Q6', 'GSQ-RCO-Q8')
-QUANTIZATIONS = (*FORMATS, *FORMATS.values(), 'Q4_0', *GSQ_RCO)
+ACTIVATION_FORMATS = ('ACTCAL-Q4', 'ACTCAL-Q8')
+CALIBRATIONS = (*GSQ_RCO, *ACTIVATION_FORMATS)
+QUANTIZATIONS = (*FORMATS, *FORMATS.values(), 'Q4_0', *CALIBRATIONS)
 SAFETENSORS = {'.safetensors', '.sft'}
 MODES = {
     'auto': 'Авто',
@@ -79,7 +81,7 @@ def suggested_output(source, quantization='Q8_0'):
 def output_quantization(quantization, gpu='auto', cpu='auto'):
     if gpu not in GPU_TARGETS or cpu not in CPU_TARGETS:
         raise ValueError('Неизвестная цель GPU или CPU.')
-    if quantization in GSQ_RCO and (gpu != 'auto' or cpu != 'auto'):
+    if quantization in CALIBRATIONS and (gpu != 'auto' or cpu != 'auto'):
         raise ValueError('GSQ/RCO выбирает типы по бюджету. Для этого режима оставьте цели GPU и CPU универсальными.')
     if quantization == 'Q4' and (gpu in ('polaris', 'pascal') or cpu != 'auto'):
         return 'Q4_0'
@@ -434,7 +436,7 @@ class Conversion:
             writer.close()
         return result
 
-    def assemble_gsq_rco(self, manifest, output, bits):
+    def assemble_gsq_rco(self, manifest, output, bits, *, activation=False):
         """Assemble prepared variants or calibrate selected tensors on Vulkan."""
         if manifest.suffix.lower() != '.json' or not manifest.is_file():
             raise ValueError('Для сборки GSQ-RCO выберите JSON-манифест оптимизированных тензоров.')
@@ -444,11 +446,15 @@ class Conversion:
                 raise ValueError('В манифесте GSQ-RCO повторяется ключ.')
             return result
         plan = json.loads(manifest.read_text(encoding='utf-8-sig'), object_pairs_hook=unique_pairs)
-        if not isinstance(plan, dict) or plan.get('format') not in ('gguf-gsq-rco-v1', 'gguf-gsq-rco-vulkan-v1'):
-            raise ValueError('Ожидается манифест gguf-gsq-rco-v1 или gguf-gsq-rco-vulkan-v1.')
+        if not isinstance(plan, dict) or plan.get('format') not in ('gguf-gsq-rco-v1', 'gguf-gsq-rco-vulkan-v1', 'gguf-activation-calibration-v1'):
+            raise ValueError('Неизвестный формат манифеста калибровки.')
         targets = plan.get('targets')
         target = targets.get(str(bits)) if isinstance(targets, dict) else None
-        if not isinstance(target, dict) or not isinstance(target.get('tensors'), dict) or not target['tensors']:
+        full = plan['format'] == 'gguf-activation-calibration-v1'
+        if activation != full:
+            raise ValueError('Для манифеста сохранения Q4_0/Q8_0 выберите ACTCAL-Q4 или ACTCAL-Q8.')
+        if not isinstance(target, dict) or (not (full and target.get('all') is True)
+                and (not isinstance(target.get('tensors'), dict) or not target['tensors'])):
             raise ValueError(f'В манифесте отсутствуют назначения тензоров для Q{bits}.')
         def local_gguf(relative):
             if not isinstance(relative, str):
@@ -460,6 +466,18 @@ class Conversion:
             if SHARD.fullmatch(source.name) or reader.get_field('split.count') is not None:
                 raise ValueError('Для сборки GSQ-RCO используйте цельные GGUF.')
             return reader
+
+        if full:
+            if not isinstance(plan.get('reference'), str):
+                raise ValueError('Укажите исходные веса в reference.')
+            reference = (manifest.parent / plan['reference']).resolve(strict=True)
+            sys.path.insert(0,str(HERE))
+            try:
+                from activation_calibration import optimize_full
+                return optimize_full(self,manifest,local_gguf(plan.get('base')),reference,target,output,gguf_module,
+                                     capture=plan.get('capture'),detect=route)
+            finally:
+                sys.path.pop(0)
 
         if plan['format'] == 'gguf-gsq-rco-vulkan-v1':
             sys.path.insert(0, str(HERE))
@@ -575,10 +593,7 @@ class Conversion:
         if quantization not in QUANTIZATIONS:
             raise ValueError(f'Неизвестный формат GGUF {quantization}.')
         self.stage('Чтение модели')
-        if quantization in GSQ_RCO:
-            gpu, cpu = gpu or 'auto', cpu or 'auto'
-        else:
-            gpu, cpu = gpu or 'auto', cpu or 'auto'
+        gpu, cpu = gpu or 'auto', cpu or 'auto'
         quantization = output_quantization(quantization, gpu, cpu)
         source = Path(os.path.abspath(USER_DIRECTORY / Path(source).expanduser()))
         if not source.exists():
@@ -589,8 +604,8 @@ class Conversion:
         output = output.parent.resolve(strict=True) / output.name
         if os.path.lexists(output):
             raise FileExistsError(f'Файл уже существует. Выберите другое имя: {output}')
-        if quantization in GSQ_RCO:
-            return self.assemble_gsq_rco(source, output, int(quantization[-1]))
+        if quantization in CALIBRATIONS:
+            return self.assemble_gsq_rco(source, output, int(quantization[-1]), activation=quantization in ACTIVATION_FORMATS)
         source, mode, detected = route(source, mode)
         expand = False
         if mode in ('diffusion', 'moss-image', 'moss-text'):
@@ -735,17 +750,27 @@ def installed_capture_profile(source):
     return None, 'sdmodel'
 
 
-def quantized_tier(path):
+def dominant_quantization(path):
     families = {'Q2_K':2,'Q3_K':3,'Q4_K':4,'Q4_0':4,'Q6_K':6,'Q8_0':8}
     counts = Counter()
+    tiers = Counter()
     for tensor in open_gguf(path).tensors:
-        if tensor.tensor_type.name in families:
-            counts[families[tensor.tensor_type.name]] += tensor.n_bytes
-    return counts.most_common(1)[0][0] if counts else None
+        layout = tensor.tensor_type.name
+        if layout in families:
+            counts[layout] += tensor.n_bytes
+            tiers[families[layout]] += tensor.n_bytes
+    if not tiers:
+        return None, None
+    tier = tiers.most_common(1)[0][0]
+    layout = next(name for name, _ in counts.most_common() if families[name] == tier)
+    return layout, tier
 
 
-def automatic_gsq_plan(source, tier, prompt, profile, reference=None):
-    reader = open_gguf(source)
+def quantized_tier(path):
+    return dominant_quantization(path)[1]
+
+
+def automatic_gsq_plan(source, tier, prompt, profile, reference=None, *, activation=False):
     _, _, role = route(source, 'auto')
     inferred, part = installed_capture_profile(source)
     if profile is None:
@@ -754,6 +779,16 @@ def automatic_gsq_plan(source, tier, prompt, profile, reference=None):
         part = part if part != 'sdmodel' else 'sdclip1'
     elif role not in ('Фото', 'Видео', 'Диффузионная модель'):
         raise ValueError('Для автозаписи нужен GGUF диффузора или энкодер с профилем .kcpps.')
+    capture = {'prompt': prompt, 'base_part': part}
+    if profile:
+        parent = profile.parent
+        capture.update(profile=str(profile), profile_root=str(parent.parent if parent.name == 'profiles' else parent))
+    if activation:
+        return {'format':'gguf-activation-calibration-v1', 'base':str(source), 'reference':str(reference),
+                'capture':capture, 'targets':{str(tier):{'all':True, 'steps':3}}}
+    if reference is not None and reference.suffix.lower() != '.gguf':
+        raise ValueError('GSQ с сохранением блочного K-кванта принимает исходные веса GGUF.')
+    reader = open_gguf(source)
     # ponytail: start with two attention projections; use a manifest to choose other matrices.
     choices = [t for t in reader.tensors if len(t.shape) == 2 and int(t.shape[0]) % 256 == 0
                and re.search(r'(?:self_attn\.[qkv]|proj\.qkv|proj\.o|attn[12]\.to_[qkv]|attn_qkv|q_proj|qkv|in_proj_z)\.weight$', t.name)]
@@ -767,10 +802,6 @@ def automatic_gsq_plan(source, tier, prompt, profile, reference=None):
     qtype = kind.GGMLQuantizationType[FORMATS[f'Q{tier}']]
     block, size = kind.GGML_QUANT_SIZES[qtype]
     budget = sum(t.n_bytes for t in reader.tensors) + sum(t.n_elements // block * size - t.n_bytes for t in choices)
-    capture = {'prompt': prompt, 'base_part': part}
-    if profile:
-        parent = profile.parent
-        capture.update(profile=str(profile), profile_root=str(parent.parent if parent.name == 'profiles' else parent))
     plan = {'format': 'gguf-gsq-rco-vulkan-v1', 'base': str(source), 'model_loss': reference is None, 'capture': capture,
             'targets': {str(tier): {'max_tensor_bytes': budget, 'tensors': {t.name: None for t in choices}}}}
     if reference is not None:
@@ -806,7 +837,19 @@ def gui(source=''):
 
     def selection():
         value = quantization_value.get()
-        return 'GSQ-RCO-' + value if optimize_value.get() else value
+        if not optimize_value.get():
+            return value
+        item = USER_DIRECTORY / Path(input_value.get().strip().strip('"')).expanduser()
+        try:
+            if item.suffix.lower() == '.json' and json.loads(item.read_text(encoding='utf-8-sig')).get('format') == 'gguf-activation-calibration-v1':
+                return 'ACTCAL-' + value
+            if item.suffix.lower() == '.gguf':
+                layout, tier = dominant_quantization(item)
+                if layout in ('Q4_0','Q8_0') and value == f'Q{tier}':
+                    return 'ACTCAL-' + value
+        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+            pass
+        return 'GSQ-RCO-' + value
 
     def refresh(*_):
         nonlocal guessed
@@ -819,7 +862,7 @@ def gui(source=''):
             kind_value.set('Автоматически')
             return
         if path.suffix.lower() == '.json':
-            kind_value.set('Манифест GSQ/RCO')
+            kind_value.set('Манифест калибровки')
         else:
             try:
                 kind_value.set(route(path, 'auto')[2])
@@ -935,7 +978,8 @@ def gui(source=''):
                 return
             if preserve:
                 chosen = filedialog.askopenfilename(parent=window, initialdir=original.parent,
-                    title='Исходные веса этой модели в GGUF F16, BF16 или F32', filetypes=[('GGUF', '*.gguf')])
+                    title='Исходные веса этой модели', filetypes=([('GGUF / Safetensors', '*.gguf *.safetensors *.sft')]
+                        if quantization in ACTIVATION_FORMATS else [('GGUF', '*.gguf')]))
                 if not chosen:
                     return
                 reference = Path(chosen).resolve(strict=True)
@@ -965,7 +1009,8 @@ def gui(source=''):
                     original = (USER_DIRECTORY / Path(source).expanduser()).resolve(strict=True)
                     with tempfile.TemporaryDirectory(prefix='gguf-plan-') as temp:
                         plan = Path(temp) / 'capture.json'
-                        payload = automatic_gsq_plan(original, int(quantization[-1]), prompt, profile, reference)
+                        payload = automatic_gsq_plan(original, int(quantization[-1]), prompt, profile, reference,
+                                                     activation=quantization in ACTIVATION_FORMATS)
                         plan.write_text(json.dumps(payload, ensure_ascii=False), encoding='utf-8')
                         job.convert(plan, output or suggested_output(original, quantization), quantization=quantization)
                 else:
@@ -1049,7 +1094,7 @@ def gui(source=''):
     format_box.grid(row=3, column=1, sticky='w', padx=4)
     format_box.bind('<<ComboboxSelected>>', refresh)
     ttk.Label(window, textvariable=format_value).grid(row=2, column=2, columnspan=2, sticky='w', padx=4)
-    ttk.Checkbutton(window, text='Калибровка GSQ/RCO', variable=optimize_value, command=refresh).grid(row=3, column=2, columnspan=2, sticky='w', padx=4)
+    ttk.Checkbutton(window, text='Калибровка весов', variable=optimize_value, command=refresh).grid(row=3, column=2, columnspan=2, sticky='w', padx=4)
     ttk.Label(window, text='Оборудование').grid(row=4, column=0, sticky='w', padx=8)
     ttk.Label(window, textvariable=hardware_value, wraplength=660).grid(row=4, column=1, columnspan=3, sticky='w', padx=4, pady=3)
     ttk.Label(window, textvariable=advice_value, wraplength=660).grid(row=5, column=1, columnspan=3, sticky='w', padx=4, pady=3)

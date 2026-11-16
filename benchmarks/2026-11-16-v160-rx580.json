@@ -1,0 +1,47 @@
+{
+  "bytes": 232265216,
+  "sha256": "8b6ef3524b4d42832fa635ee61e853f2f6fd71267973784a9b93935c527d1642",
+  "inputs": {
+    "INT8": {
+      "bytes": 264,
+      "sha256": "3d67157a88391858ad4784e4dbb659d691900edd86aba3412b585d5f5201ccbd"
+    },
+    "W4A8": {
+      "bytes": 416,
+      "sha256": "886c1daccb19de905cfd9f8af921f07af49df3ee354f0ddc8d7f25bf426bdc5a"
+    },
+    "FP8": {
+      "bytes": 264,
+      "sha256": "3d67157a88391858ad4784e4dbb659d691900edd86aba3412b585d5f5201ccbd"
+    },
+    "FP8-E5M2": {
+      "bytes": 264,
+      "sha256": "3d67157a88391858ad4784e4dbb659d691900edd86aba3412b585d5f5201ccbd"
+    },
+    "BF16": {
+      "bytes": 264,
+      "sha256": "3d67157a88391858ad4784e4dbb659d691900edd86aba3412b585d5f5201ccbd"
+    }
+  },
+  "weighted_calibration": {
+    "4": {
+      "format": "Q4_0",
+      "bytes": 3616,
+      "mse": [
+        0.0010344705078750849,
+        0.0009132309351116419
+      ],
+      "output_sha256": "0cc508c2983ffae7699a8199775da6d9f07e6845f7acb1f9a6bb5f83d3eb79c8"
+    },
+    "8": {
+      "format": "Q8_0",
+      "bytes": 6688,
+      "mse": [
+        6.133293481980218e-06,
+        4.117474873055471e-06
+      ],
+      "output_sha256": "d942cdcf07360d0cb4b254e9cecf49b5160aafa35144964c08a7277f410d1346"
+    }
+  },
+  "gui": true
+}

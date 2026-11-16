@@ -19,7 +19,7 @@ CPU instructions and GPU memory are detected for the information panel and memor
 
 ## Vulkan GSQ-RCO preview
 
-Enable **GSQ/RCO calibration** and open a media GGUF or a `gguf-gsq-rco-vulkan-v1` manifest. The bundled calibration uses Vulkan shaders on a supported AMD Polaris GPU. The media worker needs AVX2 to record activations. A matching local KoboldCpp profile supplies companion weights automatically, including when the selected GGUF is its text encoder. Direct GGUF selection calibrates two recognized attention projections. A manifest can cover up to eight matrices and supports Q3 through the CLI. [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO)
+Enable **Weight calibration** and open a media GGUF or a `gguf-gsq-rco-vulkan-v1` manifest. The bundled calibration uses Vulkan shaders on a supported AMD Polaris GPU. The media worker needs AVX2 to record activations. A matching local KoboldCpp profile supplies companion weights automatically, including when the selected GGUF is its text encoder. Mixed-layout GSQ/RCO from a directly selected GGUF calibrates two recognized attention projections. A manifest can cover up to eight matrices and supports Q3 through the CLI. [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO)
 
 ```json
 {
@@ -45,7 +45,9 @@ The v1.3.0 RX 580 check covers automatic capture on ABDM and Wan, photo generati
 
 ### Calibration with the original tensor layouts
 
-Enable calibration and select the quantized file's current tier. Supply the matching F16, BF16 or F32 GGUF. In a manifest, `base` is the quantized file and `reference` is its higher-precision source. Supply 8–32 activation rows per matrix or use `capture` and `null`. Vulkan calibration learns candidate codes and scales. The converter keeps the original tensor types and payload size, accepting a tensor only when its held-out projection error falls. NVIDIA TensorRT INT8 uses its own graph-level quantization and deployment flow. [TensorRT quantization](https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/work-with-quantized-types.html)
+For a model dominated by Q4_0 or Q8_0, enable weight calibration and select the existing tier. Provide the matching GGUF or Safetensors checkpoint. `ACTCAL-Q4` and `ACTCAL-Q8` use activation-weighted least squares on Vulkan. Each candidate matrix is measured on 8–32 captured rows split into fitting and selection sets. The converter keeps tensor types, model metadata, and payload size. Check output quality separately on independent prompts.
+
+For the CLI, use `-q ACTCAL-Q4` or `-q ACTCAL-Q8` with a `gguf-activation-calibration-v1` manifest. Set `base`, `reference` and `capture` the same way as for GSQ/RCO. Under `targets`, use `"4": {"all": true}` or `"8": {"all": true}` to capture and fit every reachable Q4_0 and Q8_0 matrix. Use `tensors` with names mapped to `.npy` or `null` for explicit selections. Safetensors inputs support common floating formats, scaled INT8, and W4A8 INT4 with its codebook and scales. Same-tier K-quant GSQ uses a GGUF reference and the `GSQ-RCO` modes.
 
 ## GSQ-RCO assembly
 

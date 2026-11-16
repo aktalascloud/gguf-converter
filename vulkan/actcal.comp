@@ -1,0 +1,63 @@
+#version 450
+layout(local_size_x=64) in;
+layout(binding=0,std430) readonly buffer Inputs { float source[]; };
+layout(binding=1,std430) writeonly buffer Output { uint encoded[]; };
+layout(push_constant) uniform Config {
+    uint blocks;
+    uint steps;
+    uint columns_blocks;
+    uint bits;
+    uint seed;
+    float target;
+} pc;
+
+float quantize(float weight,float scale,float low,float high) {
+    return abs(scale)<1e-20 ? 0.0 : clamp(roundEven(weight/scale),low,high);
+}
+
+void main() {
+    uint block=gl_GlobalInvocationID.x;
+    if (block>=pc.blocks) return;
+    uint begin=block*32u;
+    uint channel=pc.blocks*32u+(block%pc.columns_blocks)*32u;
+    uint stride=pc.bits==4u ? 5u : 9u;
+    float low=pc.bits==4u ? -8.0 : -128.0;
+    float high=pc.bits==4u ? 7.0 : 127.0;
+    float original=source[pc.blocks*32u+pc.columns_blocks*32u+block];
+    float peak=0.0;
+    for(uint i=0u;i<32u;++i) peak=max(peak,abs(source[begin+i]));
+    float initial=peak/high;
+    float best=original, best_loss=3.40282e38;
+    for(uint seed=0u;seed<3u;++seed) {
+        float d=seed==0u ? original : (seed==1u ? initial : -(peak / -low));
+        for(uint step=0u;step<=pc.steps;++step) {
+            float loss=0.0,numerator=0.0,denominator=0.0;
+            for(uint i=0u;i<32u;++i) {
+                float w=source[begin+i],p=source[channel+i],q=quantize(w,d,low,high);
+                float residual=w-q*d;
+                loss+=p*residual*residual;
+                numerator+=p*w*q;
+                denominator+=p*q*q;
+            }
+            if(loss<best_loss) { best_loss=loss; best=d; }
+            if(denominator<1e-16) break;
+            d=numerator/denominator;
+        }
+    }
+    uint offset=block*stride;
+    encoded[offset]=floatBitsToUint(best);
+    for(uint word=0u;word<stride-1u;++word) {
+        uint packed=0u;
+        for(uint b=0u;b<4u;++b) {
+            uint i=word*4u+b;
+            int l=int(quantize(source[begin+i],best,low,high));
+            uint code;
+            if(pc.bits==4u) {
+                int h=int(quantize(source[begin+i+16u],best,low,high));
+                code=uint(l+8) | (uint(h+8)<<4u);
+            } else code=uint(l)&255u;
+            packed|=code<<(b*8u);
+        }
+        encoded[offset+1u+word]=packed;
+    }
+}

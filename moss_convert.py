@@ -37,7 +37,7 @@ def fp8_table():
 
 
 FP8 = fp8_table()
-DTYPES = {'F32': '<f4', 'F16': '<f2', 'BF16': '<u2', 'F8_E4M3': 'u1',
+DTYPES = {'F32': '<f4', 'F16': '<f2', 'BF16': '<u2', 'F8_E4M3': 'u1', 'F8_E5M2': 'u1',
           'I8': 'i1', 'U8': 'u1', 'I32': '<i4', 'I64': '<i8'}
 
 
@@ -58,7 +58,17 @@ class SafeFile:
             return (data.astype(np.uint32) << 16).view(np.float32)
         if kind == 'F8_E4M3':
             return FP8[data]
+        if kind == 'F8_E5M2':
+            return decode_e5m2(data)
         return data
+
+
+def decode_e5m2(raw):
+    exponent = ((raw >> 2) & 31).astype(np.int16)
+    fraction = (raw & 3).astype(np.float32) / 4
+    value = np.ldexp(np.where(exponent == 0, fraction, 1 + fraction), np.maximum(exponent, 1) - 15)
+    value = np.where(exponent == 31, np.where(fraction == 0, np.inf, np.nan), value)
+    return np.where(raw & 128, -value, value)
 
 
 def decode_rows(source, name, rows, config):

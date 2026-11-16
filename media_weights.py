@@ -10,15 +10,7 @@ import sys
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from convert import comfy_formats, safe_header
-from moss_convert import SafeFile, np, unrotate
-
-
-def decode_e5m2(raw):
-    exponent = ((raw >> 2) & 31).astype(np.int16)
-    fraction = (raw & 3).astype(np.float32) / 4
-    value = np.ldexp(np.where(exponent == 0, fraction, 1 + fraction), np.maximum(exponent, 1) - 15)
-    value = np.where(exponent == 31, np.where(fraction == 0, np.inf, np.nan), value)
-    return np.where(raw & 128, -value, value)
+from moss_convert import SafeFile, decode_e5m2, np, unrotate
 
 
 def expand(source, output):
