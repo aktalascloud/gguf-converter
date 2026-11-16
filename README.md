@@ -35,6 +35,8 @@ Select **GSQ-RCO-Q2**, **GSQ-RCO-Q3** or **GSQ-RCO-Q4** and open a `gguf-gsq-rco
 
 Paths are relative to the manifest. Supply 2–32 captured activation rows per matrix as a NumPy `.npy` array of shape `[samples, input_width]`. The current search accepts up to eight rank-two weights with widths divisible by 256. RCO uses normalized layer reconstruction error and enforces the exact integer budget for all tensor data, including untouched weights. The mode label selects a manifest entry. Actual per-tensor types and the resulting size depend on that entry. This is a bounded adaptation of the research algorithms. Activation capture and whole-model task-loss optimization are external to this workflow.
 
+The RX 580 validation used two projections per model in ABDM, the MOSS Qwen encoder and Wan. Held-out layer error decreased by 1.5–61.8% against rounding to the same K-quant types. The photo and 480p video fixtures took approximately the same time, with changes in the fixed-seed renders. [November 16 measurements and SHA-256 evidence](benchmarks/2026-11-16-rx580.json)
+
 ## GSQ-RCO assembly
 
 Select **GSQ-RCO-Q2**, **GSQ-RCO-Q3** or **GSQ-RCO-Q4** and open a JSON manifest. The converter copies packed tensors from previously GSQ-optimized GGUF variants according to a per-tensor RCO assignment. Run GSQ calibration and the RCO search separately. The bundled EXE handles the assembly offline. [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO)

@@ -1,0 +1,1055 @@
+{
+  "date": "2026-11-16",
+  "hardware": "Windows x64, AMD Radeon RX 580 8 GB, Vulkan",
+  "portable": {
+    "date": "2026-11-16",
+    "sha256": "9b89e44841bcfd3e69d38de5968698815500bfafe30b1e70cdad5a6d12d031d2",
+    "cases": [
+      {
+        "target": 2,
+        "budget": 10496,
+        "tensor_payload": 10112,
+        "choices": {
+          "blk.0.attn_q.weight": "Q2_K",
+          "blk.1.attn_q.weight": "Q2_K",
+          "blk.2.attn_q.weight": "Q2_K"
+        },
+        "output_sha256": "9747132d9924a32800870bf6146c66a28779ff4426c156cc464a239c50df0a58"
+      },
+      {
+        "target": 3,
+        "budget": 13184,
+        "tensor_payload": 12608,
+        "choices": {
+          "blk.0.attn_q.weight": "Q3_K",
+          "blk.1.attn_q.weight": "Q3_K",
+          "blk.2.attn_q.weight": "Q3_K"
+        },
+        "output_sha256": "c14c7f05fa45252fff43c84096a43d05e3575d4c8d4a55888147bbd7a2a790d4"
+      },
+      {
+        "target": 4,
+        "budget": 15488,
+        "tensor_payload": 14784,
+        "choices": {
+          "blk.0.attn_q.weight": "Q3_K",
+          "blk.1.attn_q.weight": "Q4_K",
+          "blk.2.attn_q.weight": "Q4_K"
+        },
+        "output_sha256": "b698da9b94e1d180ee54951de111b7998fa270b59be1420b92908a792023470b"
+      }
+    ],
+    "isolated_path": true,
+    "gui_open_close": true,
+    "standard_q4_q8": true,
+    "separate_computer_tested": false
+  },
+  "operator_probes": {
+    "date": "2026-11-16",
+    "gpu": "RX 580 / Windows Vulkan",
+    "vulkan_exe_sha256": "3983e3f1b88a45d0594fe16a759c70c6e8c5f76866cb60204b51673088506cdf",
+    "shader_sha256": {
+      "gsq": "cf109d71429ba38c8f00ee0f606b22e379e34f0e0c6247e2eb097ae8cbc807dc",
+      "rco": "a16d14139ea130e414f805e7ea7e725020b167d24966404d46e722a45dd540c9"
+    },
+    "seed": 1729,
+    "gsq": {
+      "scope": "Activation reconstruction of sampled 256-column blocks. Measurements on independent input rows use the decoded Q2_K/Q3_K/Q4_K bytes. These tests do not measure model generation.",
+      "steps": 24,
+      "train_samples": 16,
+      "control_samples": 16,
+      "models": [
+        {
+          "category": "text",
+          "reference_file": "moss-qwen35-text-q8_0.gguf",
+          "tensor": "model.layers.0.linear_attn.in_proj_qkv.weight",
+          "input_scope": "Actual token embeddings sampled from the reference encoder. No end-to-end text prompt or model trace.",
+          "blocks": 16,
+          "columns_per_block": 256,
+          "cases": [
+            {
+              "bits": 2,
+              "training_initial_mse": 0.025956323370337486,
+              "training_final_mse": 0.011563649401068687,
+              "holdout_initial_mse": 0.023385152220726013,
+              "holdout_final_mse": 0.0238444022834301,
+              "packed_training_initial_mse": 0.026087170466780663,
+              "packed_training_final_mse": 0.011526700109243393,
+              "matching_cpu_blocks": 16,
+              "cpu_training_final_mse": 0.011563648469746113,
+              "max_abs_cpu_gpu_weight_error": 0.0,
+              "gpu_us": [
+                847.2,
+                797.92,
+                756.48,
+                740.32,
+                713.76,
+                688.16
+              ],
+              "median_gpu_us": 748.4000000000001,
+              "wall_s": 0.15147679997608066,
+              "cpu_reference_ms": 34.16290000313893
+            },
+            {
+              "bits": 3,
+              "training_initial_mse": 0.003712453879415989,
+              "training_final_mse": 0.0023114345967769623,
+              "holdout_initial_mse": 0.0032197823747992516,
+              "holdout_final_mse": 0.0030843359418213367,
+              "packed_training_initial_mse": 0.0037010242231190205,
+              "packed_training_final_mse": 0.0023486840073019266,
+              "matching_cpu_blocks": 15,
+              "cpu_training_final_mse": 0.002377469092607498,
+              "max_abs_cpu_gpu_weight_error": 0.01559398416429758,
+              "gpu_us": [
+                752.48,
+                753.44,
+                709.44,
+                708.64,
+                710.08,
+                708.8
+              ],
+              "median_gpu_us": 709.76,
+              "wall_s": 0.1130165999638848,
+              "cpu_reference_ms": 35.876500012818724
+            },
+            {
+              "bits": 4,
+              "training_initial_mse": 0.0006119711324572563,
+              "training_final_mse": 0.0003626891993917525,
+              "holdout_initial_mse": 0.000551181030459702,
+              "holdout_final_mse": 0.000703201221767813,
+              "packed_training_initial_mse": 0.0006049532094039023,
+              "packed_training_final_mse": 0.00035624377778731287,
+              "matching_cpu_blocks": 15,
+              "cpu_training_final_mse": 0.00035828998079523444,
+              "max_abs_cpu_gpu_weight_error": 0.0081818588078022,
+              "gpu_us": [
+                753.28,
+                754.4,
+                710.08,
+                708.8,
+                710.08,
+                709.12
+              ],
+              "median_gpu_us": 710.08,
+              "wall_s": 0.11238820001017302,
+              "cpu_reference_ms": 35.46560002723709
+            }
+          ]
+        },
+        {
+          "category": "photo",
+          "reference_file": "abdm-moss-q8_0.gguf",
+          "tensor": "model.diffusion_model.layers.0.proj.qkv.weight",
+          "input_scope": "Synthetic correlated input probes. Denoiser activations and rendered media were not measured.",
+          "blocks": 16,
+          "columns_per_block": 256,
+          "cases": [
+            {
+              "bits": 2,
+              "training_initial_mse": 0.037956759333610535,
+              "training_final_mse": 0.017926188185811043,
+              "holdout_initial_mse": 0.034071847796440125,
+              "holdout_final_mse": 0.025988182052969933,
+              "packed_training_initial_mse": 0.03737085312604904,
+              "packed_training_final_mse": 0.01804225891828537,
+              "matching_cpu_blocks": 16,
+              "cpu_training_final_mse": 0.017926190048456192,
+              "max_abs_cpu_gpu_weight_error": 0.0,
+              "gpu_us": [
+                730.24,
+                729.76,
+                700.0,
+                688.32,
+                688.0,
+                688.32
+              ],
+              "median_gpu_us": 694.1600000000001,
+              "wall_s": 0.11275540001224726,
+              "cpu_reference_ms": 34.11519998917356
+            },
+            {
+              "bits": 3,
+              "training_initial_mse": 0.006132369861006737,
+              "training_final_mse": 0.0025106314569711685,
+              "holdout_initial_mse": 0.005850376561284065,
+              "holdout_final_mse": 0.0034006652422249317,
+              "packed_training_initial_mse": 0.006146976258605719,
+              "packed_training_final_mse": 0.0025587116833776236,
+              "matching_cpu_blocks": 14,
+              "cpu_training_final_mse": 0.002465674886479974,
+              "max_abs_cpu_gpu_weight_error": 0.02294069714844227,
+              "gpu_us": [
+                752.48,
+                751.52,
+                709.28,
+                709.92,
+                708.96,
+                708.8
+              ],
+              "median_gpu_us": 709.5999999999999,
+              "wall_s": 0.11041169997770339,
+              "cpu_reference_ms": 34.41329998895526
+            },
+            {
+              "bits": 4,
+              "training_initial_mse": 0.000926368753425777,
+              "training_final_mse": 0.00034182920353487134,
+              "holdout_initial_mse": 0.0007662727730348706,
+              "holdout_final_mse": 0.0003103134222328663,
+              "packed_training_initial_mse": 0.000910708331502974,
+              "packed_training_final_mse": 0.0003439305000938475,
+              "matching_cpu_blocks": 15,
+              "cpu_training_final_mse": 0.000344212370691821,
+              "max_abs_cpu_gpu_weight_error": 0.01052905898541212,
+              "gpu_us": [
+                752.48,
+                724.48,
+                709.44,
+                709.76,
+                710.08,
+                709.28
+              ],
+              "median_gpu_us": 709.9200000000001,
+              "wall_s": 0.11046470003202558,
+              "cpu_reference_ms": 35.39959999034181
+            }
+          ]
+        },
+        {
+          "category": "video",
+          "reference_file": "wan22-ti2v-5b-turbo-q4_0.gguf",
+          "tensor": "blocks.0.self_attn.q.weight",
+          "input_scope": "Synthetic correlated input probes. Denoiser activations and rendered media were not measured.",
+          "blocks": 16,
+          "columns_per_block": 256,
+          "cases": [
+            {
+              "bits": 2,
+              "training_initial_mse": 0.04647102206945419,
+              "training_final_mse": 0.02292574755847454,
+              "holdout_initial_mse": 0.049136683344841,
+              "holdout_final_mse": 0.0270236786454916,
+              "packed_training_initial_mse": 0.04714769124984741,
+              "packed_training_final_mse": 0.023012787103652954,
+              "matching_cpu_blocks": 16,
+              "cpu_training_final_mse": 0.02292574569582939,
+              "max_abs_cpu_gpu_weight_error": 0.0,
+              "gpu_us": [
+                755.36,
+                746.08,
+                721.44,
+                688.8,
+                687.68,
+                688.96
+              ],
+              "median_gpu_us": 705.2,
+              "wall_s": 0.14094559999648482,
+              "cpu_reference_ms": 33.855499990750104
+            },
+            {
+              "bits": 3,
+              "training_initial_mse": 0.005025576800107956,
+              "training_final_mse": 0.0019683116115629673,
+              "holdout_initial_mse": 0.005502119194716215,
+              "holdout_final_mse": 0.0030214968137443066,
+              "packed_training_initial_mse": 0.005156347528100014,
+              "packed_training_final_mse": 0.0020899022929370403,
+              "matching_cpu_blocks": 15,
+              "cpu_training_final_mse": 0.0020155352540314198,
+              "max_abs_cpu_gpu_weight_error": 0.014803261496126652,
+              "gpu_us": [
+                753.76,
+                752.8,
+                725.28,
+                709.12,
+                708.64,
+                709.12
+              ],
+              "median_gpu_us": 717.2,
+              "wall_s": 0.11149859998840839,
+              "cpu_reference_ms": 35.86489998269826
+            },
+            {
+              "bits": 4,
+              "training_initial_mse": 0.0006608854746446013,
+              "training_final_mse": 0.00023840356152504683,
+              "holdout_initial_mse": 0.0007067061960697174,
+              "holdout_final_mse": 0.0003126694355159998,
+              "packed_training_initial_mse": 0.0006375417578965425,
+              "packed_training_final_mse": 0.0002470406179782003,
+              "matching_cpu_blocks": 8,
+              "cpu_training_final_mse": 0.00023688990040682256,
+              "max_abs_cpu_gpu_weight_error": 0.007842466235160828,
+              "gpu_us": [
+                752.48,
+                748.96,
+                709.6,
+                709.6,
+                708.32,
+                709.44
+              ],
+              "median_gpu_us": 709.6,
+              "wall_s": 0.1114227999933064,
+              "cpu_reference_ms": 35.6191000319086
+            }
+          ]
+        }
+      ]
+    },
+    "rco": {
+      "scope": "Synthetic coupled loss with three cost choices. Vulkan Gumbel straight-through, projected Adam, bisection retraction, momentum transport and exact bounded selection by learned logit score. The full-model search was not run.",
+      "cases": [
+        {
+          "budget_units": 360.0,
+          "soft_budget_units": 360.00006103515625,
+          "hard_budget_units": 336.0,
+          "selected": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "reconstruction_mse": 1.6183093786239624,
+          "max_logit_error": 2.384185791015625e-05,
+          "gpu_us": [
+            38912.2,
+            38526.2,
+            38510.6,
+            38621.4,
+            38458.1,
+            38625.9
+          ],
+          "cpu_reference_ms": 52.947600022889674
+        },
+        {
+          "budget_units": 440.0,
+          "soft_budget_units": 440.0,
+          "hard_budget_units": 414.0,
+          "selected": [
+            1,
+            1,
+            1,
+            0
+          ],
+          "reconstruction_mse": 0.3560625910758972,
+          "max_logit_error": 2.7418136596679688e-05,
+          "gpu_us": [
+            38516.5,
+            38727.5,
+            38734.7,
+            38821.8,
+            38713.0,
+            38828.2
+          ],
+          "cpu_reference_ms": 52.9551999643445
+        },
+        {
+          "budget_units": 552.0,
+          "soft_budget_units": 552.0,
+          "hard_budget_units": 542.0,
+          "selected": [
+            1,
+            2,
+            2,
+            2
+          ],
+          "reconstruction_mse": 0.8291099667549133,
+          "max_logit_error": 2.193450927734375e-05,
+          "gpu_us": [
+            38913.8,
+            38530.4,
+            38525.1,
+            38565.0,
+            38462.6,
+            38630.1
+          ],
+          "cpu_reference_ms": 52.93490004260093
+        }
+      ]
+    },
+    "profiles_unchanged": true
+  },
+  "model_scope": "Two selected rank-two projections per recorded model. GSQ used captured rows. RCO used independent normalized layer reconstruction proxies. The source checkpoints were Q8_0 for ABDM and its Qwen encoder and Q4_0 for Wan.",
+  "activation_capture": {
+    "native_trace_sha256": "6088a170470cddcc649d9cfc7039c0ff5ce5dba0e71a13b24869f3db8170d199",
+    "seed": 424242,
+    "training_rows": 28,
+    "heldout_rows": 4
+  },
+  "calibration": [
+    {
+      "category": "photo",
+      "target": 2,
+      "tensor_types": {
+        "model.diffusion_model.layers.0.proj.o.weight": "Q2_K",
+        "model.diffusion_model.layers.0.proj.qkv.weight": "Q2_K"
+      },
+      "bytes": 5373393888,
+      "tensor_payload": 5373362176,
+      "budget": 5373657088,
+      "output_sha256": "0d1d6432ace6a81803d367344724d1d75feab45e27494547fbb90a0a84ab2d88",
+      "reference_sha256": "92e2a40e6752c83da3526ec6f2da1653bed433cabde48627792a568eac0f008f",
+      "reference_bytes": 5401115648,
+      "converter_sha256": "9b89e44841bcfd3e69d38de5968698815500bfafe30b1e70cdad5a6d12d031d2",
+      "converter_wall_seconds": 209.68799999996554,
+      "heldout": {
+        "model.diffusion_model.layers.0.proj.o.weight": {
+          "rows": 4,
+          "learned_normalized_mse": 0.02303394866814822,
+          "rtn_normalized_mse": 0.056171066832099985
+        },
+        "model.diffusion_model.layers.0.proj.qkv.weight": {
+          "rows": 4,
+          "learned_normalized_mse": 0.04866248060678158,
+          "rtn_normalized_mse": 0.05954580853089721
+        }
+      }
+    },
+    {
+      "category": "photo",
+      "target": 3,
+      "tensor_types": {
+        "model.diffusion_model.layers.0.proj.o.weight": "Q3_K",
+        "model.diffusion_model.layers.0.proj.qkv.weight": "Q3_K"
+      },
+      "bytes": 5377227744,
+      "tensor_payload": 5377196032,
+      "budget": 5377490944,
+      "output_sha256": "d6d3b46aebd218982b7955ea87c10eee385140a9e8d1ae80c7af52ffefd18683",
+      "reference_sha256": "92e2a40e6752c83da3526ec6f2da1653bed433cabde48627792a568eac0f008f",
+      "reference_bytes": 5401115648,
+      "converter_sha256": "9b89e44841bcfd3e69d38de5968698815500bfafe30b1e70cdad5a6d12d031d2",
+      "converter_wall_seconds": 367.89100000000326,
+      "heldout": {
+        "model.diffusion_model.layers.0.proj.o.weight": {
+          "rows": 4,
+          "learned_normalized_mse": 0.002518398465514,
+          "rtn_normalized_mse": 0.006584756960475842
+        },
+        "model.diffusion_model.layers.0.proj.qkv.weight": {
+          "rows": 4,
+          "learned_normalized_mse": 0.006331819700752021,
+          "rtn_normalized_mse": 0.007346853082630216
+        }
+      }
+    },
+    {
+      "category": "photo",
+      "target": 4,
+      "tensor_types": {
+        "model.diffusion_model.layers.0.proj.o.weight": "Q3_K",
+        "model.diffusion_model.layers.0.proj.qkv.weight": "Q4_K"
+      },
+      "bytes": 5380987872,
+      "tensor_payload": 5380956160,
+      "budget": 5382062080,
+      "output_sha256": "7459eb5d320acfd541d5fc81805409a682218ceac7c5e18a44a3caa91d42bf9c",
+      "reference_sha256": "92e2a40e6752c83da3526ec6f2da1653bed433cabde48627792a568eac0f008f",
+      "reference_bytes": 5401115648,
+      "converter_sha256": "9b89e44841bcfd3e69d38de5968698815500bfafe30b1e70cdad5a6d12d031d2",
+      "converter_wall_seconds": 174.34400000004098,
+      "heldout": {
+        "model.diffusion_model.layers.0.proj.o.weight": {
+          "rows": 4,
+          "learned_normalized_mse": 0.002518398465514,
+          "rtn_normalized_mse": 0.006584756960475842
+        },
+        "model.diffusion_model.layers.0.proj.qkv.weight": {
+          "rows": 4,
+          "learned_normalized_mse": 0.0012774013498290109,
+          "rtn_normalized_mse": 0.0014657167006855993
+        }
+      }
+    },
+    {
+      "category": "video",
+      "target": 2,
+      "tensor_types": {
+        "blocks.0.self_attn.k.weight": "Q2_K",
+        "blocks.0.self_attn.q.weight": "Q2_K"
+      },
+      "bytes": 3029473984,
+      "tensor_payload": 3029422848,
+      "budget": 3029570304,
+      "output_sha256": "1e1589c0c0d349ad94a9b558f5bb52126b43c70b5d971b6c0cb1a442e39c9d83",
+      "reference_sha256": "8aa3a98c254bd02a9cc7e4f1db37720fe291cef8b0c32fb78e7a2391125d6b28",
+      "reference_bytes": 3033897696,
+      "converter_sha256": "9b89e44841bcfd3e69d38de5968698815500bfafe30b1e70cdad5a6d12d031d2",
+      "converter_wall_seconds": 149.48499999998603,
+      "heldout": {
+        "blocks.0.self_attn.k.weight": {
+          "rows": 4,
+          "learned_normalized_mse": 0.03102059294600094,
+          "rtn_normalized_mse": 0.0324436535566659
+        },
+        "blocks.0.self_attn.q.weight": {
+          "rows": 4,
+          "learned_normalized_mse": 0.04452098568960512,
+          "rtn_normalized_mse": 0.045198011260233116
+        }
+      }
+    },
+    {
+      "category": "video",
+      "target": 3,
+      "tensor_types": {
+        "blocks.0.self_attn.k.weight": "Q3_K",
+        "blocks.0.self_attn.q.weight": "Q3_K"
+      },
+      "bytes": 3031390912,
+      "tensor_payload": 3031339776,
+      "budget": 3031487232,
+      "output_sha256": "2408795a405f49eabf9f3860d80e3ed1abcc754a2adeb9844747f08ed37ee037",
+      "reference_sha256": "8aa3a98c254bd02a9cc7e4f1db37720fe291cef8b0c32fb78e7a2391125d6b28",
+      "reference_bytes": 3033897696,
+      "converter_sha256": "9b89e44841bcfd3e69d38de5968698815500bfafe30b1e70cdad5a6d12d031d2",
+      "converter_wall_seconds": 84.45300000003772,
+      "heldout": {
+        "blocks.0.self_attn.k.weight": {
+          "rows": 4,
+          "learned_normalized_mse": 0.004123929521271551,
+          "rtn_normalized_mse": 0.004440166810352445
+        },
+        "blocks.0.self_attn.q.weight": {
+          "rows": 4,
+          "learned_normalized_mse": 0.004628632994535126,
+          "rtn_normalized_mse": 0.005505603499162703
+        }
+      }
+    },
+    {
+      "category": "video",
+      "target": 4,
+      "tensor_types": {
+        "blocks.0.self_attn.k.weight": "Q3_K",
+        "blocks.0.self_attn.q.weight": "Q4_K"
+      },
+      "bytes": 3032644288,
+      "tensor_payload": 3032593152,
+      "budget": 3033772800,
+      "output_sha256": "141db83fab22fd7231b0d6b0044d16e2695772e3c208978872e1fe2f5b97e7a6",
+      "reference_sha256": "8aa3a98c254bd02a9cc7e4f1db37720fe291cef8b0c32fb78e7a2391125d6b28",
+      "reference_bytes": 3033897696,
+      "converter_sha256": "9b89e44841bcfd3e69d38de5968698815500bfafe30b1e70cdad5a6d12d031d2",
+      "converter_wall_seconds": 102.93699999997625,
+      "heldout": {
+        "blocks.0.self_attn.k.weight": {
+          "rows": 4,
+          "learned_normalized_mse": 0.004123929521271551,
+          "rtn_normalized_mse": 0.004440166810352445
+        },
+        "blocks.0.self_attn.q.weight": {
+          "rows": 4,
+          "learned_normalized_mse": 0.00046593075436108324,
+          "rtn_normalized_mse": 0.0005857607289516824
+        }
+      }
+    },
+    {
+      "category": "text",
+      "target": 2,
+      "tensor_types": {
+        "model.layers.0.linear_attn.in_proj_qkv.weight": "Q2_K",
+        "model.layers.0.linear_attn.in_proj_z.weight": "Q2_K"
+      },
+      "bytes": 10363784896,
+      "tensor_payload": 10363727680,
+      "budget": 10364120896,
+      "output_sha256": "6bfce87eac17ecd636738e5642ecbe4969a632d0406ed128ff3390dd27ca8d7f",
+      "reference_sha256": "f3083eab75745e7d3e0cfc8184747d5e53ae4a23811096345d0e2b361c571bde",
+      "reference_bytes": 10400747200,
+      "converter_sha256": "9b89e44841bcfd3e69d38de5968698815500bfafe30b1e70cdad5a6d12d031d2",
+      "converter_wall_seconds": 729.9679999999935,
+      "heldout": {
+        "model.layers.0.linear_attn.in_proj_qkv.weight": {
+          "rows": 4,
+          "learned_normalized_mse": 0.04607504565476771,
+          "rtn_normalized_mse": 0.0559327004226117
+        },
+        "model.layers.0.linear_attn.in_proj_z.weight": {
+          "rows": 4,
+          "learned_normalized_mse": 0.07516240059907052,
+          "rtn_normalized_mse": 0.08576432752069577
+        }
+      }
+    },
+    {
+      "category": "text",
+      "target": 3,
+      "tensor_types": {
+        "model.layers.0.linear_attn.in_proj_qkv.weight": "Q3_K",
+        "model.layers.0.linear_attn.in_proj_z.weight": "Q3_K"
+      },
+      "bytes": 10368896704,
+      "tensor_payload": 10368839488,
+      "budget": 10369232704,
+      "output_sha256": "364d9c8214c743efa9a1f02d33a8cfc3167bc54edf5659a4df0da8a542771574",
+      "reference_sha256": "f3083eab75745e7d3e0cfc8184747d5e53ae4a23811096345d0e2b361c571bde",
+      "reference_bytes": 10400747200,
+      "converter_sha256": "9b89e44841bcfd3e69d38de5968698815500bfafe30b1e70cdad5a6d12d031d2",
+      "converter_wall_seconds": 382.48399999999674,
+      "heldout": {
+        "model.layers.0.linear_attn.in_proj_qkv.weight": {
+          "rows": 4,
+          "learned_normalized_mse": 0.005757116507215121,
+          "rtn_normalized_mse": 0.006548333528808842
+        },
+        "model.layers.0.linear_attn.in_proj_z.weight": {
+          "rows": 4,
+          "learned_normalized_mse": 0.008918097972298878,
+          "rtn_normalized_mse": 0.010231592461716668
+        }
+      }
+    },
+    {
+      "category": "text",
+      "target": 4,
+      "tensor_types": {
+        "model.layers.0.linear_attn.in_proj_qkv.weight": "Q4_K",
+        "model.layers.0.linear_attn.in_proj_z.weight": "Q3_K"
+      },
+      "bytes": 10373353152,
+      "tensor_payload": 10373295936,
+      "budget": 10375327552,
+      "output_sha256": "71961be2b0fc4b9c97790a9978854dcdc171cb8b022e2f7aac462e25c8a6a10b",
+      "reference_sha256": "f3083eab75745e7d3e0cfc8184747d5e53ae4a23811096345d0e2b361c571bde",
+      "reference_bytes": 10400747200,
+      "converter_sha256": "9b89e44841bcfd3e69d38de5968698815500bfafe30b1e70cdad5a6d12d031d2",
+      "converter_wall_seconds": 610.1410000000033,
+      "heldout": {
+        "model.layers.0.linear_attn.in_proj_qkv.weight": {
+          "rows": 4,
+          "learned_normalized_mse": 0.0011356923004503198,
+          "rtn_normalized_mse": 0.001290436613957706
+        },
+        "model.layers.0.linear_attn.in_proj_z.weight": {
+          "rows": 4,
+          "learned_normalized_mse": 0.008918097972298878,
+          "rtn_normalized_mse": 0.010231592461716668
+        }
+      }
+    }
+  ],
+  "generation": [
+    {
+      "kind": "photo",
+      "case": "mix2",
+      "models": {
+        "photo": 2,
+        "text": 2
+      },
+      "seed": 847631,
+      "executable_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "repeats": [
+        {
+          "seconds": 131.56299999996554,
+          "native_seconds": 124.689,
+          "size": [
+            2944,
+            4416
+          ],
+          "raw_sha256": "ec19d9351085c0be4f33afe87b79be1b4b1633ef90280951bff1324e21f5876c",
+          "final_sha256": "ce94a2fd84f84e09fdb9a4ab4938a6062657a395a0f2c07ca3c73d97b6dcdbe1"
+        }
+      ],
+      "load_seconds": [
+        164.2570982000325
+      ],
+      "profile_sha256": "c1950fab05e63e227a4ed417f03f1ab3b2fa43502d8221806fee9e7cab833057",
+      "quality_vs_reference": {
+        "raw": {
+          "psnr_db": 16.815149100116667,
+          "pixels_equal": false,
+          "ssim": 0.6009600162506104
+        },
+        "final": {
+          "psnr_db": 16.631203173048437,
+          "pixels_equal": false
+        }
+      },
+      "median_wall_seconds": 131.56299999996554,
+      "reference_for_change": "median of two equivalent fresh Native sessions",
+      "wall_time_change_percent": -0.08240203842988514
+    },
+    {
+      "kind": "photo",
+      "case": "mix3",
+      "models": {
+        "photo": 3,
+        "text": 3
+      },
+      "seed": 847631,
+      "executable_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "repeats": [
+        {
+          "seconds": 129.73499999998603,
+          "native_seconds": 122.823,
+          "size": [
+            2944,
+            4416
+          ],
+          "raw_sha256": "5ca43836b642e0d93119e55349305832069bcff4484438e9ae3c219e91938d1d",
+          "final_sha256": "d83c5f35331abd78135d6f56b78f739a110a034113960b5c43a009a8660cf06d"
+        }
+      ],
+      "load_seconds": [
+        21.061711099988315
+      ],
+      "profile_sha256": "4a9b4ecc51ef524a076de8e8b986749306882b5ed44ae9e335e49ec8fe3023bf",
+      "quality_vs_reference": {
+        "raw": {
+          "psnr_db": 19.678898583264434,
+          "pixels_equal": false,
+          "ssim": 0.7524490356445312
+        },
+        "final": {
+          "psnr_db": 19.36781631404822,
+          "pixels_equal": false
+        }
+      },
+      "median_wall_seconds": 129.73499999998603,
+      "reference_for_change": "median of two equivalent fresh Native sessions",
+      "wall_time_change_percent": -1.470705505755432
+    },
+    {
+      "kind": "photo",
+      "case": "mix4",
+      "models": {
+        "photo": 4,
+        "text": 4
+      },
+      "seed": 847631,
+      "executable_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "repeats": [
+        {
+          "seconds": 130.0470000000205,
+          "native_seconds": 123.199,
+          "size": [
+            2944,
+            4416
+          ],
+          "raw_sha256": "310e6bf69fa9690a562b40da498459c94e98b0545c6e6f8011dfc9a438070fa1",
+          "final_sha256": "3200a2f4720f788da289c94636a25ca65091d1bcb5baab4722f9f456867a17df"
+        }
+      ],
+      "load_seconds": [
+        20.566612199996598
+      ],
+      "profile_sha256": "576d8dd0fb5a04adb157d7b77874c0068832713c81c363edbacc6fadcae80454",
+      "quality_vs_reference": {
+        "raw": {
+          "psnr_db": 21.024000949562847,
+          "pixels_equal": false,
+          "ssim": 0.8178920149803162
+        },
+        "final": {
+          "psnr_db": 20.6072017793311,
+          "pixels_equal": false
+        }
+      },
+      "median_wall_seconds": 130.0470000000205,
+      "reference_for_change": "median of two equivalent fresh Native sessions",
+      "wall_time_change_percent": -1.2337521786994876
+    },
+    {
+      "kind": "photo",
+      "case": "reference",
+      "models": {},
+      "seed": 847631,
+      "executable_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "repeats": [
+        {
+          "seconds": 131.875,
+          "native_seconds": 124.573,
+          "size": [
+            2944,
+            4416
+          ],
+          "raw_sha256": "aacfe6b47122f3eb4302f6ba59f21679739c82156a64c09b73a0ec974a60d746",
+          "final_sha256": "1b1875cc8813724b997502997406c7d699686e5f07e3d7d37e550dc81be7ba6d"
+        },
+        {
+          "seconds": 131.46799999999348,
+          "native_seconds": 125.307,
+          "size": [
+            2944,
+            4416
+          ],
+          "raw_sha256": "aacfe6b47122f3eb4302f6ba59f21679739c82156a64c09b73a0ec974a60d746",
+          "final_sha256": "1b1875cc8813724b997502997406c7d699686e5f07e3d7d37e550dc81be7ba6d"
+        }
+      ],
+      "load_seconds": [
+        51.62611030001426,
+        11.044946599984542
+      ],
+      "profile_sha256": "843293d4413b02e0f4585c7dc46d3857c6289abc26b2de9e95d7946416c928fd",
+      "reference_repeat_quality": {
+        "raw": {
+          "psnr_db": null,
+          "pixels_equal": true,
+          "ssim": 1.0
+        },
+        "final": {
+          "psnr_db": null,
+          "pixels_equal": true
+        }
+      },
+      "median_wall_seconds": 131.67149999999674
+    },
+    {
+      "kind": "video",
+      "case": "q2",
+      "models": {
+        "video": 2
+      },
+      "seed": 847631,
+      "executable_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "repeats": [
+        {
+          "seconds": 96.84299999999348,
+          "encode_seconds": 0.2817046999698505,
+          "avi": {
+            "microseconds_per_frame": 41666,
+            "frames": 5,
+            "width": 832,
+            "height": 480,
+            "codec": "MJPG",
+            "scale": 1,
+            "rate": 24,
+            "fps": 24.0
+          },
+          "avi_sha256": "16d61f4be0be58912348ede0176ad645c4ac052fb844125cf669968b5d2fbb7b"
+        }
+      ],
+      "load_seconds": [
+        18.042579700006172
+      ],
+      "profile_sha256": "bea16b77284b5508732464d9def20bb9f59f1a80e6ff5f82e09cfaf9a83d99cb",
+      "quality_vs_reference": [
+        {
+          "psnr_db": 27.884101964330736,
+          "pixels_equal": false,
+          "ssim": 0.902393639087677
+        },
+        {
+          "psnr_db": 28.568252847266034,
+          "pixels_equal": false,
+          "ssim": 0.8969181776046753
+        },
+        {
+          "psnr_db": 29.559157299882784,
+          "pixels_equal": false,
+          "ssim": 0.8987955451011658
+        },
+        {
+          "psnr_db": 30.677049759690554,
+          "pixels_equal": false,
+          "ssim": 0.9052513241767883
+        },
+        {
+          "psnr_db": 31.916399669774055,
+          "pixels_equal": false,
+          "ssim": 0.934319794178009
+        }
+      ],
+      "median_wall_seconds": 96.84299999999348,
+      "reference_for_change": "first request on a newly started Native process",
+      "wall_time_change_percent": -0.25851236944541833
+    },
+    {
+      "kind": "video",
+      "case": "q3",
+      "models": {
+        "video": 3
+      },
+      "seed": 847631,
+      "executable_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "repeats": [
+        {
+          "seconds": 96.875,
+          "encode_seconds": 0.15062019997276366,
+          "avi": {
+            "microseconds_per_frame": 41666,
+            "frames": 5,
+            "width": 832,
+            "height": 480,
+            "codec": "MJPG",
+            "scale": 1,
+            "rate": 24,
+            "fps": 24.0
+          },
+          "avi_sha256": "5eb05b9ff3270e1380407154a4d5f4cef29337401eda9bf068997b69c772e428"
+        }
+      ],
+      "load_seconds": [
+        17.551691100001335
+      ],
+      "profile_sha256": "af0e0874a7ef3efbad08c5bf5554f492795d82b1ee18949ed01602ca786939ad",
+      "quality_vs_reference": [
+        {
+          "psnr_db": 35.29271098038749,
+          "pixels_equal": false,
+          "ssim": 0.9584570527076721
+        },
+        {
+          "psnr_db": 35.61067330682088,
+          "pixels_equal": false,
+          "ssim": 0.9550917148590088
+        },
+        {
+          "psnr_db": 36.28299060560354,
+          "pixels_equal": false,
+          "ssim": 0.9545549154281616
+        },
+        {
+          "psnr_db": 37.165216112910144,
+          "pixels_equal": false,
+          "ssim": 0.9564142227172852
+        },
+        {
+          "psnr_db": 39.018707368338085,
+          "pixels_equal": false,
+          "ssim": 0.9701693654060364
+        }
+      ],
+      "median_wall_seconds": 96.875,
+      "reference_for_change": "first request on a newly started Native process",
+      "wall_time_change_percent": -0.22555461715740854
+    },
+    {
+      "kind": "video",
+      "case": "q4",
+      "models": {
+        "video": 4
+      },
+      "seed": 847631,
+      "executable_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "repeats": [
+        {
+          "seconds": 96.14100000000326,
+          "encode_seconds": 0.1488474000361748,
+          "avi": {
+            "microseconds_per_frame": 41666,
+            "frames": 5,
+            "width": 832,
+            "height": 480,
+            "codec": "MJPG",
+            "scale": 1,
+            "rate": 24,
+            "fps": 24.0
+          },
+          "avi_sha256": "a18d21f1c944a402d6fc23dabaabf65cd3da5fd1e23d3c54ca131988a83a4a4e"
+        }
+      ],
+      "load_seconds": [
+        18.069837199989706
+      ],
+      "profile_sha256": "0bafa8bd89b78790b98b0b6712b6fb93983935acb9e30d066d73b86ff5f5b424",
+      "quality_vs_reference": [
+        {
+          "psnr_db": 38.266456998140924,
+          "pixels_equal": false,
+          "ssim": 0.9739382863044739
+        },
+        {
+          "psnr_db": 38.509271060158234,
+          "pixels_equal": false,
+          "ssim": 0.9715481400489807
+        },
+        {
+          "psnr_db": 39.0321351133874,
+          "pixels_equal": false,
+          "ssim": 0.9707246422767639
+        },
+        {
+          "psnr_db": 39.8416977248962,
+          "pixels_equal": false,
+          "ssim": 0.9716810584068298
+        },
+        {
+          "psnr_db": 41.743306894225974,
+          "pixels_equal": false,
+          "ssim": 0.9800875186920166
+        }
+      ],
+      "median_wall_seconds": 96.14100000000326,
+      "reference_for_change": "first request on a newly started Native process",
+      "wall_time_change_percent": -0.9815230601063707
+    },
+    {
+      "kind": "video",
+      "case": "reference",
+      "models": {},
+      "seed": 847631,
+      "executable_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "repeats": [
+        {
+          "seconds": 97.09399999998277,
+          "encode_seconds": 0.8518817000440322,
+          "avi": {
+            "microseconds_per_frame": 41666,
+            "frames": 5,
+            "width": 832,
+            "height": 480,
+            "codec": "MJPG",
+            "scale": 1,
+            "rate": 24,
+            "fps": 24.0
+          },
+          "avi_sha256": "d99705e080cd1a834ed894e132b50ecff05a3095a6ea948ced93da3c5581ab16"
+        },
+        {
+          "seconds": 77.78200000000652,
+          "encode_seconds": 0.12719249998917803,
+          "avi": {
+            "microseconds_per_frame": 41666,
+            "frames": 5,
+            "width": 832,
+            "height": 480,
+            "codec": "MJPG",
+            "scale": 1,
+            "rate": 24,
+            "fps": 24.0
+          },
+          "avi_sha256": "d99705e080cd1a834ed894e132b50ecff05a3095a6ea948ced93da3c5581ab16"
+        }
+      ],
+      "load_seconds": [
+        18.058101499977056
+      ],
+      "profile_sha256": "bf15115402c68882d29b308c6c92b02e4efdf95265731d9368bb2c7beeadb2f8",
+      "reference_repeat_quality": [
+        {
+          "psnr_db": null,
+          "pixels_equal": true,
+          "ssim": 1.0
+        },
+        {
+          "psnr_db": null,
+          "pixels_equal": true,
+          "ssim": 1.0
+        },
+        {
+          "psnr_db": null,
+          "pixels_equal": true,
+          "ssim": 1.0
+        },
+        {
+          "psnr_db": null,
+          "pixels_equal": true,
+          "ssim": 1.0
+        },
+        {
+          "psnr_db": null,
+          "pixels_equal": true,
+          "ssim": 1.0
+        }
+      ],
+      "median_wall_seconds": 87.43799999999464
+    }
+  ],
+  "comparison_scope": "The photo times include normal profile and requested upscale. Video uses the 480p Native 5-frame 24-fps generation fixture with encode timing reported separately. Video candidates compare with the first reference request. The second reference reused a warm process. SSIM and PSNR describe similarity to the fixed-seed reference, not general perceptual quality. Demo workloads and limited tensor coverage do not establish whole-model gains."
+}
