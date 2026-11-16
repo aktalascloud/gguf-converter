@@ -12,7 +12,7 @@ BITS = (2, 3, 4)
 BLOCK_BYTES = {2: 84, 3: 110, 4: 144, 6: 210, 8: 272}
 
 
-def pack_k(codes, scales, bits):
+def pack_k(codes, scales, bits, *, legacy_q4=False):
     """Pack one signed GSQ grid and eight scales per 256 weights."""
     count = len(codes)
     if not np.isfinite(scales).all() or (scales < 0).any():
@@ -20,12 +20,16 @@ def pack_k(codes, scales, bits):
     zero_point = 1 << (bits - 1)
     if (codes < -zero_point).any() or (codes >= zero_point).any():
         raise ValueError('GSQ code exceeds the selected grid.')
-    if bits == 8:
+    if bits == 8 or legacy_q4:
         d = scales.astype('<f2')
         if not np.isfinite(d).all():
             raise ValueError('GSQ scale exceeds GGUF FP16 range.')
-        signed = codes.astype(np.int8).view(np.uint8).reshape(count, 8, 32)
-        return np.concatenate((d.view(np.uint8).reshape(count, 8, 2), signed), axis=2).reshape(count, 272)
+        if legacy_q4:
+            pairs = (codes + 8).astype(np.uint8).reshape(count, 8, 2, 16)
+            payload = pairs[:, :, 0] | (pairs[:, :, 1] << 4)
+        else:
+            payload = codes.astype(np.int8).view(np.uint8).reshape(count, 8, 32)
+        return np.concatenate((d.view(np.uint8).reshape(count, 8, 2), payload), axis=2).reshape(count, -1)
     limit = {2: 15, 3: 31, 4: 63, 6: 127}[bits]
     d = (scales.max(axis=1, keepdims=True) / limit).astype('<f2')
     if not np.isfinite(d).all() or (d.astype(np.float32) * (1 << (bits - 1)) > np.finfo(np.float16).max).any():
@@ -83,14 +87,14 @@ def rtn(w, bits):
     return np.clip(np.rint(w / np.repeat(scale, 32, axis=1)), low, high), scale
 
 
-def learn(run, binaries, work, weights, activation, bits, steps, seed, dequantize):
+def learn(run, binaries, work, weights, activation, bits, steps, seed, dequantize, *, legacy_q4=False):
     n = len(weights)
     packed = np.concatenate((weights.ravel(), activation.ravel()))
     raw = dispatch(run, binaries, work, 'gsq', packed, n, steps, activation.shape[1], bits, seed)
     codes = raw[:n * BLOCK].reshape(n, BLOCK)
     scales = raw[n * 258:].reshape(n, 8)
-    learned = pack_k(codes, scales, bits)
-    baseline = pack_k(*rtn(weights, bits), bits)
+    learned = pack_k(codes, scales, bits, legacy_q4=legacy_q4)
+    baseline = pack_k(*rtn(weights, bits), bits, legacy_q4=legacy_q4)
     # Compare both candidates in the format actually used by the inference backend.
     def loss(q):
         residual = activation @ (dequantize(q) - weights)[..., None]
@@ -157,6 +161,95 @@ def build_variants(converter, binaries, work, tensor, inputs, steps, seed, quant
             rounding.append(baseline)
         normalized.append(error / max(energy, 1e-30))
     return arrays, normalized, rounding
+
+
+def optimize_same_layout(converter, manifest, base, reference, target, output, gguf_module, *,
+                         capture=None, detect=None):
+    """Calibrate selected quantized tensors against matching higher-precision weights."""
+    tensors = target.get('tensors')
+    steps = target.get('steps', 24)
+    if not isinstance(tensors, dict) or not 1 <= len(tensors) <= 8 or type(steps) is not int or not 1 <= steps <= 128:
+        raise ValueError('Укажите 1–8 тензоров и от 1 до 128 шагов калибровки.')
+    if base.endianess.name != 'LITTLE' or reference.endianess.name != 'LITTLE':
+        raise ValueError('Vulkan-калибровка принимает little-endian GGUF.')
+    base_arch, ref_arch = (r.get_field('general.architecture') for r in (base, reference))
+    if base_arch is None or ref_arch is None or base_arch.contents() != ref_arch.contents():
+        raise ValueError('Архитектура исходных весов не совпадает с целевым GGUF.')
+    base_weights = {t.name: t for t in base.tensors}
+    refs = {t.name: t for t in reference.tensors}
+    layouts = {'Q2_K':2, 'Q3_K':3, 'Q4_K':4, 'Q4_0':4, 'Q6_K':6, 'Q8_0':8}
+    entries = []
+    for name, relative in tensors.items():
+        t, ref = base_weights.get(name), refs.get(name)
+        if t is None or ref is None or len(t.shape) != 2 or int(t.shape[0]) % BLOCK or tuple(t.shape) != tuple(ref.shape):
+            raise ValueError(f'{name}: у исходного и целевого веса должны совпадать двумерные формы с шириной, кратной 256.')
+        if t.tensor_type.name not in layouts or ref.tensor_type.name not in ('F32', 'F16', 'BF16'):
+            raise ValueError(f'{name}: нужны исходный F32/F16/BF16 и поддерживаемый квант GGUF.')
+        if relative is None and capture is None:
+            raise ValueError(f'{name}: укажите активации .npy или настройки capture.')
+        if relative is not None and (not isinstance(relative, str) or Path(relative).suffix.lower() != '.npy'):
+            raise ValueError(f'{name}: ожидаются активации .npy.')
+        entries.append((t, ref, relative))
+    binaries = Path(__file__).resolve().parent / 'vulkan'
+    dequant = gguf_module('quants').dequantize
+    with tempfile.TemporaryDirectory(prefix='.gguf-calibrate-', dir=output.parent) as scratch, ExitStack() as files:
+        root=Path(scratch)
+        automatic=[t.name for t,_,relative in entries if relative is None]
+        recorded={}
+        if automatic:
+            from native_capture import collect
+            folder=root/'capture'
+            folder.mkdir()
+            converter.stage('Сбор активаций Vulkan')
+            recorded,_,_=collect(converter,manifest,Path(base.data.filename).resolve(strict=True),
+                                 capture,automatic,folder,detect)
+        replacements={}
+        for i,(t,ref,relative) in enumerate(entries):
+            work=root/str(i)
+            work.mkdir()
+            data = recorded[t.name] if relative is None else (manifest.parent / relative).resolve(strict=True)
+            x=np.load(data,allow_pickle=False)
+            columns,rows=map(int,t.shape)
+            if not isinstance(x,np.ndarray) or x.ndim!=2 or x.shape[1]!=columns or not 8<=len(x)<=32 or not np.isfinite(x).all():
+                if hasattr(x,'close'):
+                    x.close()
+                raise ValueError(f'{t.name}: нужны 8–32 конечных строки активаций шириной {columns}.')
+            blocks=columns//BLOCK
+            x=x.astype(np.float32,copy=False)
+            training=x[:3*len(x)//4]
+            validation=x[len(training):]
+            train_blocks=training.reshape(len(training),blocks,BLOCK).transpose(1,0,2)
+            batch=max(1,min(4096,4096*24*16//(steps*len(training)))//blocks)
+            bits=layouts[t.tensor_type.name]
+            typ=t.tensor_type
+            out=np.memmap(work/'weights.bin',dtype=np.uint8,mode='w+',shape=t.data.shape)
+            files.callback(out._mmap.close)
+            before=after=0.
+            for start in range(0, rows, batch):
+                part=slice(start,min(rows,start+batch))
+                expected=dequant(ref.data[part],ref.tensor_type).astype(np.float32)
+                count=len(expected)
+                weights=expected.reshape(-1,BLOCK)
+                old=t.data[part].reshape(len(weights),-1)
+                decode=lambda q:dequant(q,typ)
+                probes=np.tile(train_blocks,(count,1,1))
+                learnt,_=learn(converter.run,binaries,work,weights,probes,
+                               bits,steps,1729+start,decode,legacy_q4=typ.name=='Q4_0')
+                old_delta=(probes @ (decode(old)-weights)[...,None])[...,0]
+                new_delta=(probes @ (decode(learnt)-weights)[...,None])[...,0]
+                improved=(new_delta**2).sum(axis=1)<(old_delta**2).sum(axis=1)
+                selected=np.where(improved[:,None],learnt,old)
+                out[part]=selected.reshape(count,-1)
+                old_full=(decode(old).reshape(count,columns)-expected) @ validation.T
+                new_full=(decode(selected).reshape(count,columns)-expected) @ validation.T
+                before+=float(np.sum(old_full**2,dtype=np.float64))
+                after+=float(np.sum(new_full**2,dtype=np.float64))
+                converter.stage(f'Калибровка {typ.name} · {i+1}/{len(entries)}',part.stop,rows)
+            if after<before:
+                replacements[t.name]=out,typ
+            converter.log(f'{t.name} · ошибка на отложенных активациях {before:.8g} → {min(after,before):.8g} · {typ.name}')
+        converter.log(f'Тензоров с улучшением по проверочным активациям: {len(replacements)}/{len(entries)}')
+        return converter.write_mixed_gguf(base,output,replacements,preserve_file_type=True)
 
 
 def optimize(converter, manifest, base, target, output, gguf_module, tier, capture=None, detect=None,

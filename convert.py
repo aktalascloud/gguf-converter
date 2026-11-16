@@ -464,6 +464,13 @@ class Conversion:
         if plan['format'] == 'gguf-gsq-rco-vulkan-v1':
             sys.path.insert(0, str(HERE))
             try:
+                if 'reference' in plan:
+                    if plan.get('model_loss'):
+                        raise ValueError('Для сохранения квантов укажите reference и активации. Оценка ведётся по тензорам.')
+                    from vulkan_workflow import optimize_same_layout
+                    return optimize_same_layout(self, manifest, local_gguf(plan.get('base')),
+                                                local_gguf(plan['reference']), target, output,
+                                                gguf_module, capture=plan.get('capture'), detect=route)
                 from vulkan_workflow import optimize
                 return optimize(self, manifest, local_gguf(plan.get('base')), target, output, gguf_module, bits,
                                 capture=plan.get('capture'), detect=route, model_loss=plan.get('model_loss', False))
@@ -518,7 +525,7 @@ class Conversion:
         replacements = {name: (chosen[name].data, chosen[name].tensor_type) for name in assignments}
         return self.write_mixed_gguf(base, output, replacements)
 
-    def write_mixed_gguf(self, base, output, replacements):
+    def write_mixed_gguf(self, base, output, replacements, *, preserve_file_type=False):
         architecture = base.get_field('general.architecture')
         if architecture is None or not architecture.contents():
             raise ValueError('В базовом GGUF отсутствует general.architecture.')
@@ -531,7 +538,8 @@ class Conversion:
             writer = gguf_module('gguf_writer').GGUFWriter(stage, architecture.contents(), endianess=base.endianess)
             try:
                 for key, field in base.fields.items():
-                    if key.startswith(('GGUF.', 'split.')) or key in ('general.architecture', 'general.file_type'):
+                    if (key.startswith(('GGUF.', 'split.')) or key == 'general.architecture'
+                            or (key == 'general.file_type' and not preserve_file_type)):
                         continue
                     if key == 'general.alignment':
                         writer.add_custom_alignment(field.contents())
@@ -569,9 +577,8 @@ class Conversion:
         self.stage('Чтение модели')
         if quantization in GSQ_RCO:
             gpu, cpu = gpu or 'auto', cpu or 'auto'
-        elif gpu is None or cpu is None:
-            card = hardware.detect(HARDWARE_HELPER)
-            gpu, cpu = gpu or card.gpu_target, cpu or card.cpu_target
+        else:
+            gpu, cpu = gpu or 'auto', cpu or 'auto'
         quantization = output_quantization(quantization, gpu, cpu)
         source = Path(os.path.abspath(USER_DIRECTORY / Path(source).expanduser()))
         if not source.exists():
@@ -728,7 +735,16 @@ def installed_capture_profile(source):
     return None, 'sdmodel'
 
 
-def automatic_gsq_plan(source, tier, prompt, profile):
+def quantized_tier(path):
+    families = {'Q2_K':2,'Q3_K':3,'Q4_K':4,'Q4_0':4,'Q6_K':6,'Q8_0':8}
+    counts = Counter()
+    for tensor in open_gguf(path).tensors:
+        if tensor.tensor_type.name in families:
+            counts[families[tensor.tensor_type.name]] += tensor.n_bytes
+    return counts.most_common(1)[0][0] if counts else None
+
+
+def automatic_gsq_plan(source, tier, prompt, profile, reference=None):
     reader = open_gguf(source)
     _, _, role = route(source, 'auto')
     inferred, part = installed_capture_profile(source)
@@ -741,6 +757,9 @@ def automatic_gsq_plan(source, tier, prompt, profile):
     # ponytail: start with two attention projections; use a manifest to choose other matrices.
     choices = [t for t in reader.tensors if len(t.shape) == 2 and int(t.shape[0]) % 256 == 0
                and re.search(r'(?:self_attn\.[qkv]|proj\.qkv|proj\.o|attn[12]\.to_[qkv]|attn_qkv|q_proj|qkv|in_proj_z)\.weight$', t.name)]
+    if reference is not None:
+        supported = {'Q2_K','Q3_K','Q4_0','Q4_K','Q6_K','Q8_0'}
+        choices = [t for t in choices if t.tensor_type.name in supported]
     if not choices:
         raise ValueError('Проекции для автозаписи не определены. Укажите тензоры в манифесте GSQ/RCO.')
     choices = choices[:2]
@@ -752,8 +771,11 @@ def automatic_gsq_plan(source, tier, prompt, profile):
     if profile:
         parent = profile.parent
         capture.update(profile=str(profile), profile_root=str(parent.parent if parent.name == 'profiles' else parent))
-    return {'format': 'gguf-gsq-rco-vulkan-v1', 'base': str(source), 'model_loss': True, 'capture': capture,
+    plan = {'format': 'gguf-gsq-rco-vulkan-v1', 'base': str(source), 'model_loss': reference is None, 'capture': capture,
             'targets': {str(tier): {'max_tensor_bytes': budget, 'tensors': {t.name: None for t in choices}}}}
+    if reference is not None:
+        plan['reference'] = str(reference)
+    return plan
 
 
 def gui(source=''):
@@ -786,14 +808,9 @@ def gui(source=''):
         value = quantization_value.get()
         return 'GSQ-RCO-' + value if optimize_value.get() else value
 
-    def targets():
-        if optimize_value.get() or card is None:
-            return 'auto', 'auto'
-        return card.gpu_target, card.cpu_target
-
     def refresh(*_):
         nonlocal guessed
-        resolved = output_quantization(selection(), *targets())
+        resolved = output_quantization(selection())
         format_value.set(resolved)
         advice_value.set('')
         value = input_value.get().strip().strip('"')
@@ -822,6 +839,9 @@ def gui(source=''):
                 if path.suffix.lower() == '.json':
                     plan = json.loads(path.read_text(encoding='utf-8-sig'))
                 elif path.suffix.lower() == '.gguf':
+                    if quantized_tier(path) == int(tier):
+                        advice_value.set(f'Размер ≈ {path.stat().st_size / hardware.GIB:.2f} GiB · квант сохранится')
+                        return
                     plan = automatic_gsq_plan(path, int(tier), '', None)
                 else:
                     return
@@ -830,7 +850,7 @@ def gui(source=''):
                     advice_value.set(f'GSQ/RCO · бюджет тензоров до {limit / hardware.GIB:.2f} GiB')
                 return
             constants = gguf_module('constants')
-            layouts = {tier: constants.GGML_QUANT_SIZES[constants.GGMLQuantizationType[output_quantization(tier, *targets())]]
+            layouts = {tier: constants.GGML_QUANT_SIZES[constants.GGMLQuantizationType[output_quantization(tier)]]
                        for tier in FORMATS}
             geometry = None
             if path.suffix.lower() == '.gguf' and not SHARD.fullmatch(path.name):
@@ -895,7 +915,6 @@ def gui(source=''):
             messagebox.showerror('GGUF', 'Выберите файл или папку модели.')
             return
         quantization = selection()
-        gpu, cpu = targets()
         if optimize_value.get():
             if Path(source).suffix.lower() != '.json' and (card is None or not card.gsq):
                 messagebox.showerror('GSQ/RCO', 'Автокалибровке нужен поддерживаемый Vulkan GPU. Обычная конвертация доступна.')
@@ -903,10 +922,23 @@ def gui(source=''):
         automatic = optimize_value.get() and Path(source).suffix.lower() == '.gguf'
         prompt = None
         profile = None
+        reference = None
         if automatic:
             if 'AVX2' not in card.instructions:
                 messagebox.showerror('GSQ/RCO', 'Встроенный сбор активаций использует AVX2. Для готовых активаций откройте манифест.')
                 return
+            original = (USER_DIRECTORY / Path(source).expanduser()).resolve()
+            try:
+                preserve = quantized_tier(original) == int(quantization[-1])
+            except (OSError,ValueError,KeyError) as error:
+                messagebox.showerror('GSQ/RCO',str(error))
+                return
+            if preserve:
+                chosen = filedialog.askopenfilename(parent=window, initialdir=original.parent,
+                    title='Исходные веса этой модели в GGUF F16, BF16 или F32', filetypes=[('GGUF', '*.gguf')])
+                if not chosen:
+                    return
+                reference = Path(chosen).resolve(strict=True)
             prompt = simpledialog.askstring('GSQ/RCO', 'Промпт для калибровки', parent=window,
                                             initialvalue='A red flower by a window, soft natural light.')
             if not prompt:
@@ -933,11 +965,11 @@ def gui(source=''):
                     original = (USER_DIRECTORY / Path(source).expanduser()).resolve(strict=True)
                     with tempfile.TemporaryDirectory(prefix='gguf-plan-') as temp:
                         plan = Path(temp) / 'capture.json'
-                        payload = automatic_gsq_plan(original, int(quantization[-1]), prompt, profile)
+                        payload = automatic_gsq_plan(original, int(quantization[-1]), prompt, profile, reference)
                         plan.write_text(json.dumps(payload, ensure_ascii=False), encoding='utf-8')
                         job.convert(plan, output or suggested_output(original, quantization), quantization=quantization)
                 else:
-                    job.convert(source, output, quantization=quantization, gpu=gpu, cpu=cpu)
+                    job.convert(source, output, quantization=quantization)
                 success = True
             except Exception as exc:
                 events.put(('log', f'Ошибка: {exc}'))

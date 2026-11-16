@@ -15,7 +15,7 @@ The converter writes a separate GGUF and protects existing files from replacemen
 
 ### Target hardware
 
-CPU instructions and GPU memory are detected automatically. The Q4 choice uses `Q4_0` on recognized Polaris, AVX and AVX2 hosts. Recommendations leave memory headroom and keep the chosen tier intact. A context estimate is available for recognized text architectures with enough metadata for an F16 KV cache. Media estimates cover the selected file. Separate weights and model-specific inference buffers can increase memory requirements. [GGML runtime repacking](https://github.com/ggml-org/llama.cpp/blob/master/ggml/CMakeLists.txt) · [Vulkan memory budget](https://docs.vulkan.org/refpages/latest/refpages/source/VK_EXT_memory_budget.html)
+CPU instructions and GPU memory are detected for the information panel and memory estimates. Q4 defaults to `Q4_K` in the window. Choose `--quantization Q4_0` in the CLI for that exact layout. The inference engine applies AVX2 and Vulkan kernels. An F16 KV-cache estimate is available for recognized text architectures. Separate component weights and inference buffers add to memory use. [GGML runtime repacking](https://github.com/ggml-org/llama.cpp/blob/master/include/llama.h) · [Vulkan memory budget](https://docs.vulkan.org/refpages/latest/refpages/source/VK_EXT_memory_budget.html)
 
 ## Vulkan GSQ-RCO preview
 
@@ -42,6 +42,10 @@ Paths are relative to the manifest. Use a NumPy `.npy` array of 2–32 activatio
 Earlier local-batch calibration evidence is recorded by binary SHA. [v1.2.0 RX 580 measurements](benchmarks/2026-11-16-rx580.json)
 
 The v1.3.0 RX 580 check covers automatic capture on ABDM and Wan, photo generation without upscaling, a 480p five-frame clip, and GGUF sizes for all four standard formats. [v1.3.0 results](benchmarks/2026-11-16-v130-rx580.json)
+
+### Calibration with the original tensor layouts
+
+Enable calibration and select the quantized file's current tier. Supply the matching F16, BF16 or F32 GGUF. In a manifest, `base` is the quantized file and `reference` is its higher-precision source. Supply 8–32 activation rows per matrix or use `capture` and `null`. Vulkan calibration learns candidate codes and scales. The converter keeps the original tensor types and payload size, accepting a tensor only when its held-out projection error falls. NVIDIA TensorRT INT8 uses its own graph-level quantization and deployment flow. [TensorRT quantization](https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/work-with-quantized-types.html)
 
 ## GSQ-RCO assembly
 
