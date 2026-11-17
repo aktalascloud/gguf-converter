@@ -40,9 +40,11 @@ void main() {
                 denominator+=p*q*q;
             }
             if(loss<best_loss) { best_loss=loss; best=d; }
+            if(best_loss==0.0) break;
             if(denominator<1e-16) break;
             d=numerator/denominator;
         }
+        if(best_loss==0.0) break;
     }
     uint offset=block*stride;
     encoded[offset]=floatBitsToUint(best);

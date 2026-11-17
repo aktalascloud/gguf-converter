@@ -1,0 +1,341 @@
+diff --git a/NOTICE.md b/NOTICE.md
+index e1bd8c7..fb5964a 100644
+--- a/NOTICE.md
++++ b/NOTICE.md
+@@ -17,3 +17,5 @@ The optional embedded capture worker adapts the Vulkan build of KoboldCpp 1.125.
+ The Windows DXGI fallback reuses the media toolkit's GPU enumeration code. [Corresponding GPU adapter source](https://github.com/aktalascloud/koboldcpp-media-pipeline/blob/05a5e5f3efc75c5d43603a695deb8b57921906f1/tools/GpuAdapter.py)
+ 
+ Music activation capture ships the YuE2 tokenizer vocabulary from the same KoboldCpp revision. The model and VAE come from the user's profile. [Tokenizer resource](https://github.com/LostRuins/koboldcpp/blob/f5576d37c1c2fc0389dec1c9c367683be0fc9b4f/embd_res/yue2_qwen_tiktoken.embd)
++
++The Vulkan MACaQ-R adaptation uses the fixed-scale greedy update and native GGUF code layouts from huawei-csl/MACaQ. The Apache 2.0 license and upstream notices accompany the portable package. [Pinned MACaQ source](https://github.com/huawei-csl/MACaQ/tree/3810efca0b9e819c8eb51addd93c3c87225b7476/llamacpp/refine)
+diff --git a/README.md b/README.md
+index 665ad70..cab6381 100644
+--- a/README.md
++++ b/README.md
+@@ -51,6 +51,10 @@ CLI ACTCAL tiers are Q2, Q3, Q4, Q5, Q6 and Q8. Use `gguf-activation-calibration
+ 
+ For YuE2, the converter detects the music GGUF and looks for a matching KoboldCpp music profile. A manifest can set `capture.base_part` to `musicllm` and provide `musicvae` in `capture.models`. `capture.prompt` is the musical style, and `capture.lyrics` optionally supplies training lyrics. The capture worker records Vulkan inputs to AR and NAR matrix products. Lookup tables and tensors unused by the calibration request keep their original bytes.
+ 
++When only a quantized GGUF is available, select its current tier, enable weight calibration and choose **No** in the reference checkpoint dialog. The CLI equivalent is `"reference": null`. The round trip expands weights to F32 in bounded chunks, runs the requantizer and checks activation projections. The original GGUF already has zero reconstruction error against those F32 values, so the published output retains its exact bytes.
++
++Enable **MACaQ-R** to fit stored codes with fixed scales using a Vulkan adaptation of the greedy refinement. CLI manifests set `"refiner": "macaq-r"` inside the target. Supported layouts are Q4_0, Q8_0, Q4_K, Q5_K and Q6_K. The adaptation uses 32-column Hessian blocks and accepts rows on the held-out activation subset. These GGUFs use the existing inference kernels and activation precision. [MACaQ paper](https://arxiv.org/abs/2611.10649) · [MACaQ-R guide](https://github.com/huawei-csl/MACaQ/blob/3810efca0b9e819c8eb51addd93c3c87225b7476/llamacpp/README.md#macaq-r)
++
+ The RX 580 trials covered 168 UMT5 projections and 395 YuE2 matrices. The stock and calibrated generation time ranges overlapped in the fixed-profile repetitions. The recorded visual and vocal content checks are included with the timings. [UMT5 and YuE2 measurements](benchmarks/2026-11-17-umt5-yue2-rx580.json)
+ 
+ ## GSQ-RCO assembly
+diff --git a/README.ru.md b/README.ru.md
+index 678288b..0f281cf 100644
+--- a/README.ru.md
++++ b/README.ru.md
+@@ -35,6 +35,10 @@ CLI принимает ACTCAL-Q2/Q3/Q4/Q5/Q6/Q8 и манифест `gguf-activa
+ 
+ YuE2 определяется по GGUF. Конвертер ищет соответствующий профиль музыки. В манифесте можно указать `capture.base_part` со значением `musicllm` и `musicvae` в `capture.models`. `capture.prompt` задаёт стиль, `capture.lyrics` — текст песни по желанию. Записываются входы матричных умножений AR и NAR на Vulkan. Таблицы lookup и тензоры вне калибровочного прогона сохраняют исходные данные.
+ 
++Если есть только квантованный GGUF, выберите его текущий квант, включите калибровку и нажмите **«Нет»** в диалоге выбора исходника. В CLI укажите `"reference": null`. Конвертер распаковывает веса блоками в F32, проверяет обратное квантование на активациях и сохраняет побайтовую копию GGUF. Для этой опоры исходные веса уже дают нулевую ошибку.
++
++Режим **MACaQ-R** уточняет коды при фиксированных масштабах. Для CLI укажите `"refiner": "macaq-r"` внутри цели манифеста. Поддерживаются Q4_0, Q8_0, Q4_K, Q5_K и Q6_K. Адаптация рассчитывает гессиан по группам из 32 столбцов на активациях и выполняет жадный подбор на Vulkan. При генерации работают привычные GGUF-ядра с обычной для них точностью активаций. [Статья MACaQ](https://arxiv.org/abs/2611.10649) · [Руководство MACaQ-R](https://github.com/huawei-csl/MACaQ/blob/3810efca0b9e819c8eb51addd93c3c87225b7476/llamacpp/README.md#macaq-r)
++
+ В проверке на RX 580 обработаны 168 проекций UMT5 и 395 матриц YuE2. В повторах с одинаковыми настройками диапазоны времени генерации перекрылись. В отчёт вошли замеры, анализ кадров и проверка вокала. [Замеры UMT5 и YuE2](benchmarks/2026-11-17-umt5-yue2-rx580.json)
+ 
+ ## Сборка GSQ-RCO
+diff --git a/activation_calibration.py b/activation_calibration.py
+index 00985ce..e0b5bf5 100644
+--- a/activation_calibration.py
++++ b/activation_calibration.py
+@@ -16,6 +16,9 @@ FLOATS = {'F32', 'F16', 'BF16', 'F8_E4M3', 'F8_E5M2'}
+ 
+ def reference_rows(path, base, gguf_module, stack):
+     """Resolve known tensor aliases and return float rows, with explicit scale metadata."""
++    if path is None:
++        decode = gguf_module('quants').dequantize
++        return lambda tensor, part: decode(tensor.data[part],tensor.tensor_type)
+     if path.suffix.lower() == '.gguf':
+         reader = gguf_module('gguf_reader').GGUFReader(path, 'r')
+         a, b = base.get_field('general.architecture'), reader.get_field('general.architecture')
+@@ -117,13 +120,45 @@ def solve_k(converter, root, helper, weights, importance, old, kind, decode):
+     return packed
+ 
+ 
++def preserve_source(converter, source, output, directory, expected):
++    """Publish the exact GGUF when its F32 reconstruction already fits the reference."""
++    staged=directory/'preserved.gguf'
++    before=source.stat()
++    identity=lambda value:(value.st_dev,value.st_ino,value.st_size,value.st_mtime_ns)
++    if identity(before)!=identity(expected):
++        raise RuntimeError('Исходный GGUF изменился во время калибровки.')
++    copied=0
++    with source.open('rb') as origin, staged.open('xb') as target:
++        for block in iter(lambda:origin.read(4*1024**2),b''):
++            if converter.cancelled:
++                raise InterruptedError('Конвертация отменена.')
++            target.write(block)
++            copied+=len(block)
++            converter.stage('Сохранение исходного кванта',copied,before.st_size)
++    after=source.stat()
++    if copied!=before.st_size or identity(before)!=identity(after):
++        raise RuntimeError('Исходный GGUF изменился во время записи.')
++    with converter.lock:
++        if converter.cancelled:
++            raise InterruptedError('Конвертация отменена.')
++        staged.rename(output)
++    converter.log(f'Готово: {output}')
++    return output
++
++
+ def optimize_full(converter, manifest, base, reference, target, output, gguf_module, *, capture, detect,
+                   evidence=None, binaries=None):
++    from macaq_refinement import BITS as FLIP_LAYOUTS, hessian, refine
++
+     if base.endianess.name!='LITTLE':
+         raise ValueError('Требуется little-endian GGUF.')
+     steps=target.get('steps',3)
+     if type(steps) is not int or not 1<=steps<=8:
+         raise ValueError('Калибровка принимает от одного до восьми шагов.')
++    refiner=target.get('refiner','actcal')
++    if refiner not in ('actcal','macaq-r'):
++        raise ValueError('Неизвестный метод калибровки.')
++    layouts=FLIP_LAYOUTS if refiner=='macaq-r' else LAYOUTS
+     specs=target.get('tensors')
+     all_weights=target.get('all') is True
+     if not all_weights and (not isinstance(specs,dict) or not specs):
+@@ -132,12 +167,17 @@ def optimize_full(converter, manifest, base, reference, target, output, gguf_mod
+     if specs and set(specs)-weights.keys():
+         raise ValueError('В манифесте есть неизвестные тензоры.')
+     entries=[t for t in base.tensors if (all_weights or t.name in specs)
+-             and t.tensor_type.name in LAYOUTS and len(t.shape)==2
++             and t.tensor_type.name in layouts and len(t.shape)==2
+              and int(t.shape[0]) % (256 if t.tensor_type.name in K_SCALES else 32) == 0]
+     if not entries or not all_weights and len(entries)!=len(specs):
+-        raise ValueError('Нужны матрицы Q4_0/Q8_0 или Q2_K–Q6_K с подходящей шириной блока.')
++        raise ValueError('Манифест содержит матрицы вне поддерживаемых форматов выбранного метода.')
+     helper=(binaries or Path(__file__).resolve().parent/'vulkan')/'vulkan-gsq.exe'
+     decode=gguf_module('quants').dequantize
++    self_reference=reference is None
++    if self_reference:
++        source=Path(base.data.filename)
++        original=source.stat()
++        converter.log('Опора F32 восстанавливается блоками из текущего GGUF. Его контрольная ошибка равна нулю.')
+     with tempfile.TemporaryDirectory(prefix='.gguf-full-cal-',dir=output.parent) as temp, ExitStack() as maps:
+         root=Path(temp)
+         ref=reference_rows(reference,base,gguf_module,maps)
+@@ -170,41 +210,55 @@ def optimize_full(converter, manifest, base, reference, target, output, gguf_mod
+             if float(importance.max())==0:
+                 continue
+             importance=np.maximum(importance/importance.max(),1e-6)
++            curvature=hessian(x[:count]) if refiner=='macaq-r' else None
+             holdout=np.ascontiguousarray(x[count:].T)
+-            candidate=np.memmap(root/f'{index}.bin',mode='w+',dtype='uint8',shape=t.data.shape)
+-            maps.callback(candidate._mmap.close)
++            if not self_reference:
++                candidate=np.memmap(root/f'{index}.bin',mode='w+',dtype='uint8',shape=t.data.shape)
++                maps.callback(candidate._mmap.close)
+             bits,packed_bytes=LAYOUTS[t.tensor_type.name]
+             chunk=max(1,8*1024*1024//width)
+-            before=after=0.0
++            before=after=roundtrip_error=0.0
+             converter.stage(f'Калибровка {index+1}/{len(entries)} · {t.tensor_type.name}',0,rows)
+             for start in range(0,rows,chunk):
+                 part=slice(start,min(rows,start+chunk))
+                 reference_values=np.ascontiguousarray(ref(t,part),dtype=np.float32)
+                 n=len(reference_values)
+                 old=t.data[part].reshape(-1,packed_bytes)
+-                if t.tensor_type.name in K_SCALES:
++                if curvature is not None:
++                    packed=refine(converter,root,helper,reference_values,old,t.tensor_type,decode,curvature,steps)
++                elif t.tensor_type.name in K_SCALES:
+                     packed=solve_k(converter,root,helper,reference_values,importance,old,t.tensor_type,decode)
+                 else:
+                     packed=solve(converter,root,helper,reference_values,importance,old,bits,steps)
+                 expected=reference_values @ holdout
+-                old_loss=((decode(old,t.tensor_type).reshape(n,width) @ holdout-expected)**2).sum(axis=1)
+                 new_loss=((decode(packed,t.tensor_type).reshape(n,width) @ holdout-expected)**2).sum(axis=1)
+-                choose=(new_loss < old_loss)
+-                old_rows=old.reshape(n,-1)
+-                new_rows=packed.reshape(n,-1)
+-                candidate[part]=np.where(choose[:,None],new_rows,old_rows)
+-                before+=float(old_loss.sum(dtype=np.float64))
+-                after+=float(np.minimum(old_loss,new_loss).sum(dtype=np.float64))
++                if self_reference:
++                    roundtrip_error+=float(new_loss.sum(dtype=np.float64))
++                else:
++                    old_loss=((decode(old,t.tensor_type).reshape(n,width) @ holdout-expected)**2).sum(axis=1)
++                    choose=(new_loss < old_loss)
++                    old_rows=old.reshape(n,-1)
++                    new_rows=packed.reshape(n,-1)
++                    candidate[part]=np.where(choose[:,None],new_rows,old_rows)
++                    before+=float(old_loss.sum(dtype=np.float64))
++                    after+=float(np.minimum(old_loss,new_loss).sum(dtype=np.float64))
+                 converter.stage(f'Калибровка {index+1}/{len(entries)} · {t.tensor_type.name}',part.stop,rows)
+             measured[t.name]=dict(before=before,after=after,changed=after<before,bytes=t.n_bytes)
++            if self_reference:
++                measured[t.name]['requantized_projection_error']=roundtrip_error
+             if after<before:
+                 replacements[t.name]=candidate,t.tensor_type
+             converter.log(f'{t.name} · {t.tensor_type.name} · {before:.6g} → {after:.6g}')
+         if not measured:
+             raise ValueError('В калибровочном запросе не было пригодных активаций для выбранных матриц.')
+         summary=dict(eligible=len(entries),observed=len(measured),changed=len(replacements),
+-                     unobserved=[t.name for t in entries if t.name not in measured],tensors=measured)
++                     refiner=refiner,unobserved=[t.name for t in entries if t.name not in measured],tensors=measured)
++        if self_reference:
++            summary.update(reference_mode='self_f32',original_bytes_preserved=True)
+         if evidence is not None:
+             evidence.update(summary)
+         converter.log(f'Матриц обработано {len(measured)}/{len(entries)}, улучшилось {len(replacements)}.')
++        if self_reference:
++            converter.log('Контроль прошёл. Сохраняю побайтовую копию текущего GGUF.')
++            return preserve_source(converter,source,output,root,original)
+         return converter.write_mixed_gguf(base,output,replacements,preserve_file_type=True)
+diff --git a/convert.py b/convert.py
+index d053153..eb4383a 100644
+--- a/convert.py
++++ b/convert.py
+@@ -470,9 +470,9 @@ class Conversion:
+             return reader
+ 
+         if full:
+-            if not isinstance(plan.get('reference'), str):
+-                raise ValueError('Укажите исходные веса в reference.')
+-            reference = (manifest.parent / plan['reference']).resolve(strict=True)
++            if 'reference' not in plan or (plan['reference'] is not None and not isinstance(plan['reference'],str)):
++                raise ValueError('Укажите путь к исходным весам в reference или null для опоры F32 из текущего GGUF.')
++            reference = (manifest.parent / plan['reference']).resolve(strict=True) if plan['reference'] is not None else None
+             sys.path.insert(0,str(HERE))
+             try:
+                 from activation_calibration import optimize_full
+@@ -772,14 +772,14 @@ def quantized_tier(path):
+     return dominant_quantization(path)[1]
+ 
+ 
+-def automatic_gsq_plan(source, tier, prompt, profile, reference=None, *, activation=False):
++def automatic_gsq_plan(source, tier, prompt, profile, reference=None, *, activation=False, refiner='actcal'):
+     _, _, role = route(source, 'auto')
+     inferred, part = installed_capture_profile(source)
+     if profile is None:
+         profile = inferred
+     if role == 'YuE2 (музыка)' and activation:
+         part = 'musicllm'
+-    elif role == 'Текстовый энкодер' and profile:
++    elif profile and (role == 'Текстовый энкодер' or part in ('sdclip1','sdclip2','sdllm')):
+         part = part if part != 'sdmodel' else 'sdclip1'
+     elif role not in ('Фото', 'Видео', 'Диффузионная модель'):
+         raise ValueError('Для автозаписи нужен GGUF диффузора или энкодер с профилем .kcpps.')
+@@ -788,8 +788,8 @@ def automatic_gsq_plan(source, tier, prompt, profile, reference=None, *, activat
+         parent = profile.parent
+         capture.update(profile=str(profile), profile_root=str(parent.parent if parent.name == 'profiles' else parent))
+     if activation:
+-        return {'format':'gguf-activation-calibration-v1', 'base':str(source), 'reference':str(reference),
+-                'capture':capture, 'targets':{str(tier):{'all':True, 'steps':3}}}
++        return {'format':'gguf-activation-calibration-v1', 'base':str(source), 'reference':str(reference) if reference else None,
++                'capture':capture, 'targets':{str(tier):{'all':True, 'steps':3, 'refiner':refiner}}}
+     if reference is not None and reference.suffix.lower() != '.gguf':
+         raise ValueError('GSQ с сохранением блочного K-кванта принимает исходные веса GGUF.')
+     reader = open_gguf(source)
+@@ -829,6 +829,7 @@ def gui(source=''):
+     kind_value = tk.StringVar(value='Автоматически')
+     quantization_value = tk.StringVar(value='Q8')
+     optimize_value = tk.BooleanVar(value=False)
++    flip_value = tk.BooleanVar(value=False)
+     format_value = tk.StringVar()
+     hardware_value = tk.StringVar(value='Определение оборудования…')
+     advice_value = tk.StringVar()
+@@ -980,13 +981,23 @@ def gui(source=''):
+             except (OSError,ValueError,KeyError) as error:
+                 messagebox.showerror('GSQ/RCO',str(error))
+                 return
++            if flip_value.get() and (quantization not in ACTIVATION_FORMATS or quantization in ('ACTCAL-Q2','ACTCAL-Q3')):
++                messagebox.showerror('MACaQ-R','Выберите текущий формат Q4_0, Q8_0, Q4_K, Q5_K или Q6_K.')
++                return
+             if preserve:
+-                chosen = filedialog.askopenfilename(parent=window, initialdir=original.parent,
+-                    title='Исходные веса этой модели', filetypes=([('GGUF / Safetensors', '*.gguf *.safetensors *.sft')]
+-                        if quantization in ACTIVATION_FORMATS else [('GGUF', '*.gguf')]))
+-                if not chosen:
++                actcal = quantization in ACTIVATION_FORMATS
++                external = messagebox.askyesnocancel('Опорные веса',
++                    'Выбрать исходные веса модели?\n\nДа — открыть исходник.\nНет — использовать F32 из текущего GGUF.',
++                    parent=window) if actcal else True
++                if external is None:
+                     return
+-                reference = Path(chosen).resolve(strict=True)
++                if external:
++                    chosen = filedialog.askopenfilename(parent=window, initialdir=original.parent,
++                        title='Исходные веса этой модели', filetypes=([('GGUF / Safetensors', '*.gguf *.safetensors *.sft')]
++                            if actcal else [('GGUF', '*.gguf')]))
++                    if not chosen:
++                        return
++                    reference = Path(chosen).resolve(strict=True)
+             music = kind_value.get() == 'YuE2 (музыка)'
+             prompt = simpledialog.askstring('Калибровка', 'Стиль музыки' if music else 'Промпт для калибровки', parent=window,
+                 initialvalue='English folk song, clear vocal, acoustic guitar' if music else 'A red flower by a window, soft natural light.')
+@@ -1006,6 +1017,7 @@ def gui(source=''):
+                          lambda label, done, total: events.put(('progress', (label, done, total))))
+         start_button.config(state='disabled')
+         cancel_button.config(state='normal')
++        refiner='macaq-r' if flip_value.get() else 'actcal'
+ 
+         def work():
+             success = False
+@@ -1015,7 +1027,7 @@ def gui(source=''):
+                     with tempfile.TemporaryDirectory(prefix='gguf-plan-') as temp:
+                         plan = Path(temp) / 'capture.json'
+                         payload = automatic_gsq_plan(original, int(quantization[-1]), prompt, profile, reference,
+-                                                     activation=quantization in ACTIVATION_FORMATS)
++                                                     activation=quantization in ACTIVATION_FORMATS,refiner=refiner)
+                         plan.write_text(json.dumps(payload, ensure_ascii=False), encoding='utf-8')
+                         job.convert(plan, output or suggested_output(original, quantization), quantization=quantization)
+                 else:
+@@ -1099,7 +1111,14 @@ def gui(source=''):
+     format_box.grid(row=3, column=1, sticky='w', padx=4)
+     format_box.bind('<<ComboboxSelected>>', refresh)
+     ttk.Label(window, textvariable=format_value).grid(row=2, column=2, columnspan=2, sticky='w', padx=4)
+-    ttk.Checkbutton(window, text='Калибровка весов', variable=optimize_value, command=refresh).grid(row=3, column=2, columnspan=2, sticky='w', padx=4)
++    ttk.Checkbutton(window, text='Калибровка весов', variable=optimize_value, command=refresh).grid(row=3, column=2, sticky='w', padx=4)
++
++    def select_flip():
++        if flip_value.get():
++            optimize_value.set(True)
++        refresh()
++
++    ttk.Checkbutton(window,text='MACaQ-R',variable=flip_value,command=select_flip).grid(row=3,column=3,sticky='w',padx=4)
+     ttk.Label(window, text='Оборудование').grid(row=4, column=0, sticky='w', padx=8)
+     ttk.Label(window, textvariable=hardware_value, wraplength=660).grid(row=4, column=1, columnspan=3, sticky='w', padx=4, pady=3)
+     ttk.Label(window, textvariable=advice_value, wraplength=660).grid(row=5, column=1, columnspan=3, sticky='w', padx=4, pady=3)
+diff --git a/portable_build.py b/portable_build.py
+index 29ba3b2..c8d5966 100644
+--- a/portable_build.py
++++ b/portable_build.py
+@@ -112,7 +112,7 @@ def included(relative):
+ def build_vulkan(args, destination):
+     destination.mkdir()
+     source = HERE / 'vulkan'
+-    for mode in ('gsq', 'rco', 'loss', 'actcal', 'actcal_k'):
++    for mode in ('gsq', 'rco', 'loss', 'actcal', 'actcal_k', 'macaq_flip'):
+         subprocess.run([str(args.glslc), '--target-env=vulkan1.1', '-O',
+                         str(source / f'{mode}.comp'), '-o', str(destination / f'{mode}.spv')], check=True)
+     subprocess.run([str(args.cxx), '-std=c++17', '-O2', '-municode', '-static', '-static-libgcc', '-static-libstdc++',
+@@ -152,7 +152,7 @@ def build(args):
+         for engine in ('llama', 'sd'):
+             copy_crt(crt, backends / engine)
+         shutil.copytree(args.hf, backends / 'hf', ignore=shutil.ignore_patterns('__pycache__', 'tests', 'examples'))
+-        for filename in ('convert.py', 'hardware.py', 'gpu_adapter.py', 'hf.py', 'moss_convert.py', 'media_weights.py', 'vulkan_workflow.py', 'native_capture.py', 'activation_calibration.py',
++        for filename in ('convert.py', 'hardware.py', 'gpu_adapter.py', 'hf.py', 'moss_convert.py', 'media_weights.py', 'vulkan_workflow.py', 'native_capture.py', 'activation_calibration.py', 'macaq_refinement.py',
+                          'LICENSE.md', 'NOTICE.md'):
+             shutil.copyfile(HERE / filename, app / filename)
+         shutil.copytree(HERE / 'licenses', app / 'licenses')
+diff --git a/vulkan/actcal.comp b/vulkan/actcal.comp
+index 11346c3..6177d93 100644
+--- a/vulkan/actcal.comp
++++ b/vulkan/actcal.comp
+@@ -40,9 +40,11 @@ void main() {
+                 denominator+=p*q*q;
+             }
+             if(loss<best_loss) { best_loss=loss; best=d; }
++            if(best_loss==0.0) break;
+             if(denominator<1e-16) break;
+             d=numerator/denominator;
+         }
++        if(best_loss==0.0) break;
+     }
+     uint offset=block*stride;
+     encoded[offset]=floatBitsToUint(best);

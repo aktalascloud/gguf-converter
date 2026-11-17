@@ -17,3 +17,5 @@ The optional embedded capture worker adapts the Vulkan build of KoboldCpp 1.125.
 The Windows DXGI fallback reuses the media toolkit's GPU enumeration code. [Corresponding GPU adapter source](https://github.com/aktalascloud/koboldcpp-media-pipeline/blob/05a5e5f3efc75c5d43603a695deb8b57921906f1/tools/GpuAdapter.py)
 
 Music activation capture ships the YuE2 tokenizer vocabulary from the same KoboldCpp revision. The model and VAE come from the user's profile. [Tokenizer resource](https://github.com/LostRuins/koboldcpp/blob/f5576d37c1c2fc0389dec1c9c367683be0fc9b4f/embd_res/yue2_qwen_tiktoken.embd)
+
+The Vulkan MACaQ-R adaptation uses the fixed-scale greedy update and native GGUF code layouts from huawei-csl/MACaQ. The Apache 2.0 license and upstream notices accompany the portable package. [Pinned MACaQ source](https://github.com/huawei-csl/MACaQ/tree/3810efca0b9e819c8eb51addd93c3c87225b7476/llamacpp/refine)

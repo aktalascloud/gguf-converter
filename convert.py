@@ -470,9 +470,9 @@ class Conversion:
             return reader
 
         if full:
-            if not isinstance(plan.get('reference'), str):
-                raise ValueError('Укажите исходные веса в reference.')
-            reference = (manifest.parent / plan['reference']).resolve(strict=True)
+            if 'reference' not in plan or (plan['reference'] is not None and not isinstance(plan['reference'],str)):
+                raise ValueError('Укажите путь к исходным весам в reference или null для опоры F32 из текущего GGUF.')
+            reference = (manifest.parent / plan['reference']).resolve(strict=True) if plan['reference'] is not None else None
             sys.path.insert(0,str(HERE))
             try:
                 from activation_calibration import optimize_full
@@ -772,14 +772,14 @@ def quantized_tier(path):
     return dominant_quantization(path)[1]
 
 
-def automatic_gsq_plan(source, tier, prompt, profile, reference=None, *, activation=False):
+def automatic_gsq_plan(source, tier, prompt, profile, reference=None, *, activation=False, refiner='actcal'):
     _, _, role = route(source, 'auto')
     inferred, part = installed_capture_profile(source)
     if profile is None:
         profile = inferred
     if role == 'YuE2 (музыка)' and activation:
         part = 'musicllm'
-    elif role == 'Текстовый энкодер' and profile:
+    elif profile and (role == 'Текстовый энкодер' or part in ('sdclip1','sdclip2','sdllm')):
         part = part if part != 'sdmodel' else 'sdclip1'
     elif role not in ('Фото', 'Видео', 'Диффузионная модель'):
         raise ValueError('Для автозаписи нужен GGUF диффузора или энкодер с профилем .kcpps.')
@@ -788,8 +788,8 @@ def automatic_gsq_plan(source, tier, prompt, profile, reference=None, *, activat
         parent = profile.parent
         capture.update(profile=str(profile), profile_root=str(parent.parent if parent.name == 'profiles' else parent))
     if activation:
-        return {'format':'gguf-activation-calibration-v1', 'base':str(source), 'reference':str(reference),
-                'capture':capture, 'targets':{str(tier):{'all':True, 'steps':3}}}
+        return {'format':'gguf-activation-calibration-v1', 'base':str(source), 'reference':str(reference) if reference else None,
+                'capture':capture, 'targets':{str(tier):{'all':True, 'steps':3, 'refiner':refiner}}}
     if reference is not None and reference.suffix.lower() != '.gguf':
         raise ValueError('GSQ с сохранением блочного K-кванта принимает исходные веса GGUF.')
     reader = open_gguf(source)
@@ -829,6 +829,7 @@ def gui(source=''):
     kind_value = tk.StringVar(value='Автоматически')
     quantization_value = tk.StringVar(value='Q8')
     optimize_value = tk.BooleanVar(value=False)
+    flip_value = tk.BooleanVar(value=False)
     format_value = tk.StringVar()
     hardware_value = tk.StringVar(value='Определение оборудования…')
     advice_value = tk.StringVar()
@@ -980,13 +981,23 @@ def gui(source=''):
             except (OSError,ValueError,KeyError) as error:
                 messagebox.showerror('GSQ/RCO',str(error))
                 return
+            if flip_value.get() and (quantization not in ACTIVATION_FORMATS or quantization in ('ACTCAL-Q2','ACTCAL-Q3')):
+                messagebox.showerror('MACaQ-R','Выберите текущий формат Q4_0, Q8_0, Q4_K, Q5_K или Q6_K.')
+                return
             if preserve:
-                chosen = filedialog.askopenfilename(parent=window, initialdir=original.parent,
-                    title='Исходные веса этой модели', filetypes=([('GGUF / Safetensors', '*.gguf *.safetensors *.sft')]
-                        if quantization in ACTIVATION_FORMATS else [('GGUF', '*.gguf')]))
-                if not chosen:
+                actcal = quantization in ACTIVATION_FORMATS
+                external = messagebox.askyesnocancel('Опорные веса',
+                    'Выбрать исходные веса модели?\n\nДа — открыть исходник.\nНет — использовать F32 из текущего GGUF.',
+                    parent=window) if actcal else True
+                if external is None:
                     return
-                reference = Path(chosen).resolve(strict=True)
+                if external:
+                    chosen = filedialog.askopenfilename(parent=window, initialdir=original.parent,
+                        title='Исходные веса этой модели', filetypes=([('GGUF / Safetensors', '*.gguf *.safetensors *.sft')]
+                            if actcal else [('GGUF', '*.gguf')]))
+                    if not chosen:
+                        return
+                    reference = Path(chosen).resolve(strict=True)
             music = kind_value.get() == 'YuE2 (музыка)'
             prompt = simpledialog.askstring('Калибровка', 'Стиль музыки' if music else 'Промпт для калибровки', parent=window,
                 initialvalue='English folk song, clear vocal, acoustic guitar' if music else 'A red flower by a window, soft natural light.')
@@ -1006,6 +1017,7 @@ def gui(source=''):
                          lambda label, done, total: events.put(('progress', (label, done, total))))
         start_button.config(state='disabled')
         cancel_button.config(state='normal')
+        refiner='macaq-r' if flip_value.get() else 'actcal'
 
         def work():
             success = False
@@ -1015,7 +1027,7 @@ def gui(source=''):
                     with tempfile.TemporaryDirectory(prefix='gguf-plan-') as temp:
                         plan = Path(temp) / 'capture.json'
                         payload = automatic_gsq_plan(original, int(quantization[-1]), prompt, profile, reference,
-                                                     activation=quantization in ACTIVATION_FORMATS)
+                                                     activation=quantization in ACTIVATION_FORMATS,refiner=refiner)
                         plan.write_text(json.dumps(payload, ensure_ascii=False), encoding='utf-8')
                         job.convert(plan, output or suggested_output(original, quantization), quantization=quantization)
                 else:
@@ -1099,7 +1111,14 @@ def gui(source=''):
     format_box.grid(row=3, column=1, sticky='w', padx=4)
     format_box.bind('<<ComboboxSelected>>', refresh)
     ttk.Label(window, textvariable=format_value).grid(row=2, column=2, columnspan=2, sticky='w', padx=4)
-    ttk.Checkbutton(window, text='Калибровка весов', variable=optimize_value, command=refresh).grid(row=3, column=2, columnspan=2, sticky='w', padx=4)
+    ttk.Checkbutton(window, text='Калибровка весов', variable=optimize_value, command=refresh).grid(row=3, column=2, sticky='w', padx=4)
+
+    def select_flip():
+        if flip_value.get():
+            optimize_value.set(True)
+        refresh()
+
+    ttk.Checkbutton(window,text='MACaQ-R',variable=flip_value,command=select_flip).grid(row=3,column=3,sticky='w',padx=4)
     ttk.Label(window, text='Оборудование').grid(row=4, column=0, sticky='w', padx=8)
     ttk.Label(window, textvariable=hardware_value, wraplength=660).grid(row=4, column=1, columnspan=3, sticky='w', padx=4, pady=3)
     ttk.Label(window, textvariable=advice_value, wraplength=660).grid(row=5, column=1, columnspan=3, sticky='w', padx=4, pady=3)

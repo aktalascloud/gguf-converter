@@ -1,0 +1,51 @@
+#version 450
+layout(local_size_x=64) in;
+layout(binding=0,std430) readonly buffer InputData { float source[]; };
+layout(binding=1,std430) writeonly buffer OutputData { uint result[]; };
+layout(push_constant) uniform Config {
+    uint blocks;
+    uint steps;
+    uint columns;
+    uint bits;
+    uint seed;
+    float target;
+} pc;
+
+// Block-local port of the fixed-scale MACaQ-R greedy update.
+void main() {
+    uint block=gl_GlobalInvocationID.x;
+    if (block>=pc.blocks) return;
+    uint stride=32u*pc.blocks;
+    uint pos=32u*block;
+    uint h=3u*stride+1024u*(block%pc.columns);
+    int codes[32];
+    float gradient[32];
+    for (uint j=0u;j<32u;++j) {
+        codes[j]=int(source[2u*stride+pos+j]);
+        gradient[j]=0.0;
+        for (uint i=0u;i<32u;++i) gradient[j]+=source[pos+i]*source[h+32u*i+j];
+    }
+    int top=(1<<int(pc.bits))-1;
+    for (uint step=0u;step<pc.steps;++step) {
+        float change=-1e-12;
+        float delta=0.0;
+        uint selected=0u;
+        int direction=0;
+        for (uint j=0u;j<32u;++j) {
+            float scale=source[stride+pos+j];
+            float square=scale*scale*source[h+33u*j];
+            float linear=2.0*scale*gradient[j];
+            float up=square+linear, down=square-linear;
+            if (codes[j]<top && up<change) { change=up; delta=scale; selected=j; direction=1; }
+            if (codes[j]>0 && down<change) { change=down; delta=-scale; selected=j; direction=-1; }
+        }
+        if (direction==0) break;
+        codes[selected]+=direction;
+        for (uint j=0u;j<32u;++j) gradient[j]+=delta*source[h+32u*selected+j];
+    }
+    for (uint word=0u;word<8u;++word) {
+        uint i=4u*word;
+        result[8u*block+word]=uint(codes[i]) | (uint(codes[i+1u])<<8u) |
+                              (uint(codes[i+2u])<<16u) | (uint(codes[i+3u])<<24u);
+    }
+}

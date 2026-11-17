@@ -51,6 +51,10 @@ CLI ACTCAL tiers are Q2, Q3, Q4, Q5, Q6 and Q8. Use `gguf-activation-calibration
 
 For YuE2, the converter detects the music GGUF and looks for a matching KoboldCpp music profile. A manifest can set `capture.base_part` to `musicllm` and provide `musicvae` in `capture.models`. `capture.prompt` is the musical style, and `capture.lyrics` optionally supplies training lyrics. The capture worker records Vulkan inputs to AR and NAR matrix products. Lookup tables and tensors unused by the calibration request keep their original bytes.
 
+When only a quantized GGUF is available, select its current tier, enable weight calibration and choose **No** in the reference checkpoint dialog. The CLI equivalent is `"reference": null`. The round trip expands weights to F32 in bounded chunks, runs the requantizer and checks activation projections. The original GGUF already has zero reconstruction error against those F32 values, so the published output retains its exact bytes.
+
+Enable **MACaQ-R** to fit stored codes with fixed scales using a Vulkan adaptation of the greedy refinement. CLI manifests set `"refiner": "macaq-r"` inside the target. Supported layouts are Q4_0, Q8_0, Q4_K, Q5_K and Q6_K. The adaptation uses 32-column Hessian blocks and accepts rows on the held-out activation subset. These GGUFs use the existing inference kernels and activation precision. [MACaQ paper](https://arxiv.org/abs/2611.10649) · [MACaQ-R guide](https://github.com/huawei-csl/MACaQ/blob/3810efca0b9e819c8eb51addd93c3c87225b7476/llamacpp/README.md#macaq-r)
+
 The RX 580 trials covered 168 UMT5 projections and 395 YuE2 matrices. The stock and calibrated generation time ranges overlapped in the fixed-profile repetitions. The recorded visual and vocal content checks are included with the timings. [UMT5 and YuE2 measurements](benchmarks/2026-11-17-umt5-yue2-rx580.json)
 
 ## GSQ-RCO assembly

@@ -1,0 +1,101 @@
+{
+  "date": "2026-11-17",
+  "gpu": "AMD Radeon RX 580 2048SP",
+  "converter": {
+    "sha256": "4fde879fa2634ed002a2c9bdb3fcb5de8a9f73854008f1cdfcb96ca356e19908",
+    "bytes": 233480192,
+    "checks": {
+      "Q4_0": {
+        "actcal": {
+          "bytes": 1888,
+          "sha256": "5ebd9e122ce6079dc2efc78f14580b706cf66acadef47abd55620de9733c0669",
+          "matches_expected_codes": true,
+          "source_hash_preserved": true
+        },
+        "macaq-r": {
+          "bytes": 1888,
+          "sha256": "4c9574a92803bc2804725b0c800449df1bfcda6439aad6090d49285b65ea6818",
+          "matches_expected_codes": true,
+          "source_hash_preserved": false
+        }
+      },
+      "Q8_0": {
+        "actcal": {
+          "bytes": 3424,
+          "sha256": "7d5327c11fdd12a1bc906ca31c8b4145971110f7acdacb46f505ddcf75eaec92",
+          "matches_expected_codes": true,
+          "source_hash_preserved": true
+        },
+        "macaq-r": {
+          "bytes": 3424,
+          "sha256": "d23cb54ec4173d8b3a30dd20fa543d33f05749f5894015dba907f128b92193b2",
+          "matches_expected_codes": true,
+          "source_hash_preserved": false
+        }
+      },
+      "Q4_K": {
+        "actcal": {
+          "bytes": 1888,
+          "sha256": "e204ae27712660c313803937e2e5bdf228aebfe7e49c6144edecb5247b92e197",
+          "matches_expected_codes": true,
+          "source_hash_preserved": true
+        },
+        "macaq-r": {
+          "bytes": 1888,
+          "sha256": "9c7d8ce88e935d2943bf66aa5125aaf7a2e41ef5198927db124156ff6549acdc",
+          "matches_expected_codes": true,
+          "source_hash_preserved": false
+        }
+      },
+      "Q5_K": {
+        "actcal": {
+          "bytes": 2272,
+          "sha256": "6ed30abeb7e64e6210a8281ab5b5c481a6972021a1e06613d37d3355595d991b",
+          "matches_expected_codes": true,
+          "source_hash_preserved": true
+        },
+        "macaq-r": {
+          "bytes": 2272,
+          "sha256": "8c4fbb1ba3d02beb739d13f98e327a2a6c197b2d9f7c441b5739ddf9dea177e9",
+          "matches_expected_codes": true,
+          "source_hash_preserved": false
+        }
+      },
+      "Q6_K": {
+        "actcal": {
+          "bytes": 2688,
+          "sha256": "430b4a489ad863432a97406c28fa719e9acdc7376f0bad4d360419fce43db212",
+          "matches_expected_codes": true,
+          "source_hash_preserved": true
+        },
+        "macaq-r": {
+          "bytes": 2688,
+          "sha256": "3b8aa3be54dd5e5d818dbb2cb6a35aee6e01539da092d5e94587b8f30ca87ce8",
+          "matches_expected_codes": true,
+          "source_hash_preserved": false
+        }
+      }
+    }
+  },
+  "moss_qwen_f32_control": {
+    "source_sha256": "f3083eab75745e7d3e0cfc8184747d5e53ae4a23811096345d0e2b361c571bde",
+    "reference_sha256": null,
+    "eligible": 248,
+    "observed": 248,
+    "changed": 0,
+    "refiner": "actcal",
+    "unobserved": [],
+    "reference_mode": "self_f32",
+    "original_bytes_preserved": true,
+    "calibration_seconds": 1312.0039335999754,
+    "candidate_sha256": "f3083eab75745e7d3e0cfc8184747d5e53ae4a23811096345d0e2b361c571bde",
+    "bytes": 10400747200,
+    "types": {
+      "Q8_0": 334,
+      "F32": 426
+    },
+    "projection_before": 0.0,
+    "projection_after": 0.0,
+    "requantized_projection_error": 0.0
+  }
+}

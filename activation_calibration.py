@@ -16,6 +16,9 @@ FLOATS = {'F32', 'F16', 'BF16', 'F8_E4M3', 'F8_E5M2'}
 
 def reference_rows(path, base, gguf_module, stack):
     """Resolve known tensor aliases and return float rows, with explicit scale metadata."""
+    if path is None:
+        decode = gguf_module('quants').dequantize
+        return lambda tensor, part: decode(tensor.data[part],tensor.tensor_type)
     if path.suffix.lower() == '.gguf':
         reader = gguf_module('gguf_reader').GGUFReader(path, 'r')
         a, b = base.get_field('general.architecture'), reader.get_field('general.architecture')
@@ -117,13 +120,45 @@ def solve_k(converter, root, helper, weights, importance, old, kind, decode):
     return packed
 
 
+def preserve_source(converter, source, output, directory, expected):
+    """Publish the exact GGUF when its F32 reconstruction already fits the reference."""
+    staged=directory/'preserved.gguf'
+    before=source.stat()
+    identity=lambda value:(value.st_dev,value.st_ino,value.st_size,value.st_mtime_ns)
+    if identity(before)!=identity(expected):
+        raise RuntimeError('Исходный GGUF изменился во время калибровки.')
+    copied=0
+    with source.open('rb') as origin, staged.open('xb') as target:
+        for block in iter(lambda:origin.read(4*1024**2),b''):
+            if converter.cancelled:
+                raise InterruptedError('Конвертация отменена.')
+            target.write(block)
+            copied+=len(block)
+            converter.stage('Сохранение исходного кванта',copied,before.st_size)
+    after=source.stat()
+    if copied!=before.st_size or identity(before)!=identity(after):
+        raise RuntimeError('Исходный GGUF изменился во время записи.')
+    with converter.lock:
+        if converter.cancelled:
+            raise InterruptedError('Конвертация отменена.')
+        staged.rename(output)
+    converter.log(f'Готово: {output}')
+    return output
+
+
 def optimize_full(converter, manifest, base, reference, target, output, gguf_module, *, capture, detect,
                   evidence=None, binaries=None):
+    from macaq_refinement import BITS as FLIP_LAYOUTS, hessian, refine
+
     if base.endianess.name!='LITTLE':
         raise ValueError('Требуется little-endian GGUF.')
     steps=target.get('steps',3)
     if type(steps) is not int or not 1<=steps<=8:
         raise ValueError('Калибровка принимает от одного до восьми шагов.')
+    refiner=target.get('refiner','actcal')
+    if refiner not in ('actcal','macaq-r'):
+        raise ValueError('Неизвестный метод калибровки.')
+    layouts=FLIP_LAYOUTS if refiner=='macaq-r' else LAYOUTS
     specs=target.get('tensors')
     all_weights=target.get('all') is True
     if not all_weights and (not isinstance(specs,dict) or not specs):
@@ -132,12 +167,17 @@ def optimize_full(converter, manifest, base, reference, target, output, gguf_mod
     if specs and set(specs)-weights.keys():
         raise ValueError('В манифесте есть неизвестные тензоры.')
     entries=[t for t in base.tensors if (all_weights or t.name in specs)
-             and t.tensor_type.name in LAYOUTS and len(t.shape)==2
+             and t.tensor_type.name in layouts and len(t.shape)==2
              and int(t.shape[0]) % (256 if t.tensor_type.name in K_SCALES else 32) == 0]
     if not entries or not all_weights and len(entries)!=len(specs):
-        raise ValueError('Нужны матрицы Q4_0/Q8_0 или Q2_K–Q6_K с подходящей шириной блока.')
+        raise ValueError('Манифест содержит матрицы вне поддерживаемых форматов выбранного метода.')
     helper=(binaries or Path(__file__).resolve().parent/'vulkan')/'vulkan-gsq.exe'
     decode=gguf_module('quants').dequantize
+    self_reference=reference is None
+    if self_reference:
+        source=Path(base.data.filename)
+        original=source.stat()
+        converter.log('Опора F32 восстанавливается блоками из текущего GGUF. Его контрольная ошибка равна нулю.')
     with tempfile.TemporaryDirectory(prefix='.gguf-full-cal-',dir=output.parent) as temp, ExitStack() as maps:
         root=Path(temp)
         ref=reference_rows(reference,base,gguf_module,maps)
@@ -170,41 +210,55 @@ def optimize_full(converter, manifest, base, reference, target, output, gguf_mod
             if float(importance.max())==0:
                 continue
             importance=np.maximum(importance/importance.max(),1e-6)
+            curvature=hessian(x[:count]) if refiner=='macaq-r' else None
             holdout=np.ascontiguousarray(x[count:].T)
-            candidate=np.memmap(root/f'{index}.bin',mode='w+',dtype='uint8',shape=t.data.shape)
-            maps.callback(candidate._mmap.close)
+            if not self_reference:
+                candidate=np.memmap(root/f'{index}.bin',mode='w+',dtype='uint8',shape=t.data.shape)
+                maps.callback(candidate._mmap.close)
             bits,packed_bytes=LAYOUTS[t.tensor_type.name]
             chunk=max(1,8*1024*1024//width)
-            before=after=0.0
+            before=after=roundtrip_error=0.0
             converter.stage(f'Калибровка {index+1}/{len(entries)} · {t.tensor_type.name}',0,rows)
             for start in range(0,rows,chunk):
                 part=slice(start,min(rows,start+chunk))
                 reference_values=np.ascontiguousarray(ref(t,part),dtype=np.float32)
                 n=len(reference_values)
                 old=t.data[part].reshape(-1,packed_bytes)
-                if t.tensor_type.name in K_SCALES:
+                if curvature is not None:
+                    packed=refine(converter,root,helper,reference_values,old,t.tensor_type,decode,curvature,steps)
+                elif t.tensor_type.name in K_SCALES:
                     packed=solve_k(converter,root,helper,reference_values,importance,old,t.tensor_type,decode)
                 else:
                     packed=solve(converter,root,helper,reference_values,importance,old,bits,steps)
                 expected=reference_values @ holdout
-                old_loss=((decode(old,t.tensor_type).reshape(n,width) @ holdout-expected)**2).sum(axis=1)
                 new_loss=((decode(packed,t.tensor_type).reshape(n,width) @ holdout-expected)**2).sum(axis=1)
-                choose=(new_loss < old_loss)
-                old_rows=old.reshape(n,-1)
-                new_rows=packed.reshape(n,-1)
-                candidate[part]=np.where(choose[:,None],new_rows,old_rows)
-                before+=float(old_loss.sum(dtype=np.float64))
-                after+=float(np.minimum(old_loss,new_loss).sum(dtype=np.float64))
+                if self_reference:
+                    roundtrip_error+=float(new_loss.sum(dtype=np.float64))
+                else:
+                    old_loss=((decode(old,t.tensor_type).reshape(n,width) @ holdout-expected)**2).sum(axis=1)
+                    choose=(new_loss < old_loss)
+                    old_rows=old.reshape(n,-1)
+                    new_rows=packed.reshape(n,-1)
+                    candidate[part]=np.where(choose[:,None],new_rows,old_rows)
+                    before+=float(old_loss.sum(dtype=np.float64))
+                    after+=float(np.minimum(old_loss,new_loss).sum(dtype=np.float64))
                 converter.stage(f'Калибровка {index+1}/{len(entries)} · {t.tensor_type.name}',part.stop,rows)
             measured[t.name]=dict(before=before,after=after,changed=after<before,bytes=t.n_bytes)
+            if self_reference:
+                measured[t.name]['requantized_projection_error']=roundtrip_error
             if after<before:
                 replacements[t.name]=candidate,t.tensor_type
             converter.log(f'{t.name} · {t.tensor_type.name} · {before:.6g} → {after:.6g}')
         if not measured:
             raise ValueError('В калибровочном запросе не было пригодных активаций для выбранных матриц.')
         summary=dict(eligible=len(entries),observed=len(measured),changed=len(replacements),
-                     unobserved=[t.name for t in entries if t.name not in measured],tensors=measured)
+                     refiner=refiner,unobserved=[t.name for t in entries if t.name not in measured],tensors=measured)
+        if self_reference:
+            summary.update(reference_mode='self_f32',original_bytes_preserved=True)
         if evidence is not None:
             evidence.update(summary)
         converter.log(f'Матриц обработано {len(measured)}/{len(entries)}, улучшилось {len(replacements)}.')
+        if self_reference:
+            converter.log('Контроль прошёл. Сохраняю побайтовую копию текущего GGUF.')
+            return preserve_source(converter,source,output,root,original)
         return converter.write_mixed_gguf(base,output,replacements,preserve_file_type=True)

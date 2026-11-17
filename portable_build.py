@@ -112,7 +112,7 @@ def included(relative):
 def build_vulkan(args, destination):
     destination.mkdir()
     source = HERE / 'vulkan'
-    for mode in ('gsq', 'rco', 'loss', 'actcal', 'actcal_k'):
+    for mode in ('gsq', 'rco', 'loss', 'actcal', 'actcal_k', 'macaq_flip'):
         subprocess.run([str(args.glslc), '--target-env=vulkan1.1', '-O',
                         str(source / f'{mode}.comp'), '-o', str(destination / f'{mode}.spv')], check=True)
     subprocess.run([str(args.cxx), '-std=c++17', '-O2', '-municode', '-static', '-static-libgcc', '-static-libstdc++',
@@ -152,7 +152,7 @@ def build(args):
         for engine in ('llama', 'sd'):
             copy_crt(crt, backends / engine)
         shutil.copytree(args.hf, backends / 'hf', ignore=shutil.ignore_patterns('__pycache__', 'tests', 'examples'))
-        for filename in ('convert.py', 'hardware.py', 'gpu_adapter.py', 'hf.py', 'moss_convert.py', 'media_weights.py', 'vulkan_workflow.py', 'native_capture.py', 'activation_calibration.py',
+        for filename in ('convert.py', 'hardware.py', 'gpu_adapter.py', 'hf.py', 'moss_convert.py', 'media_weights.py', 'vulkan_workflow.py', 'native_capture.py', 'activation_calibration.py', 'macaq_refinement.py',
                          'LICENSE.md', 'NOTICE.md'):
             shutil.copyfile(HERE / filename, app / filename)
         shutil.copytree(HERE / 'licenses', app / 'licenses')

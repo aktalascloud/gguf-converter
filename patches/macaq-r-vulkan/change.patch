@@ -1,0 +1,410 @@
+diff --git a/licenses/MACaQ-Apache-2.0.txt b/licenses/MACaQ-Apache-2.0.txt
+new file mode 100644
+index 0000000..75b5248
+--- /dev/null
++++ b/licenses/MACaQ-Apache-2.0.txt
+@@ -0,0 +1,202 @@
++
++                                 Apache License
++                           Version 2.0, January 2004
++                        http://www.apache.org/licenses/
++
++   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
++
++   1. Definitions.
++
++      "License" shall mean the terms and conditions for use, reproduction,
++      and distribution as defined by Sections 1 through 9 of this document.
++
++      "Licensor" shall mean the copyright owner or entity authorized by
++      the copyright owner that is granting the License.
++
++      "Legal Entity" shall mean the union of the acting entity and all
++      other entities that control, are controlled by, or are under common
++      control with that entity. For the purposes of this definition,
++      "control" means (i) the power, direct or indirect, to cause the
++      direction or management of such entity, whether by contract or
++      otherwise, or (ii) ownership of fifty percent (50%) or more of the
++      outstanding shares, or (iii) beneficial ownership of such entity.
++
++      "You" (or "Your") shall mean an individual or Legal Entity
++      exercising permissions granted by this License.
++
++      "Source" form shall mean the preferred form for making modifications,
++      including but not limited to software source code, documentation
++      source, and configuration files.
++
++      "Object" form shall mean any form resulting from mechanical
++      transformation or translation of a Source form, including but
++      not limited to compiled object code, generated documentation,
++      and conversions to other media types.
++
++      "Work" shall mean the work of authorship, whether in Source or
++      Object form, made available under the License, as indicated by a
++      copyright notice that is included in or attached to the work
++      (an example is provided in the Appendix below).
++
++      "Derivative Works" shall mean any work, whether in Source or Object
++      form, that is based on (or derived from) the Work and for which the
++      editorial revisions, annotations, elaborations, or other modifications
++      represent, as a whole, an original work of authorship. For the purposes
++      of this License, Derivative Works shall not include works that remain
++      separable from, or merely link (or bind by name) to the interfaces of,
++      the Work and Derivative Works thereof.
++
++      "Contribution" shall mean any work of authorship, including
++      the original version of the Work and any modifications or additions
++      to that Work or Derivative Works thereof, that is intentionally
++      submitted to Licensor for inclusion in the Work by the copyright owner
++      or by an individual or Legal Entity authorized to submit on behalf of
++      the copyright owner. For the purposes of this definition, "submitted"
++      means any form of electronic, verbal, or written communication sent
++      to the Licensor or its representatives, including but not limited to
++      communication on electronic mailing lists, source code control systems,
++      and issue tracking systems that are managed by, or on behalf of, the
++      Licensor for the purpose of discussing and improving the Work, but
++      excluding communication that is conspicuously marked or otherwise
++      designated in writing by the copyright owner as "Not a Contribution."
++
++      "Contributor" shall mean Licensor and any individual or Legal Entity
++      on behalf of whom a Contribution has been received by Licensor and
++      subsequently incorporated within the Work.
++
++   2. Grant of Copyright License. Subject to the terms and conditions of
++      this License, each Contributor hereby grants to You a perpetual,
++      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
++      copyright license to reproduce, prepare Derivative Works of,
++      publicly display, publicly perform, sublicense, and distribute the
++      Work and such Derivative Works in Source or Object form.
++
++   3. Grant of Patent License. Subject to the terms and conditions of
++      this License, each Contributor hereby grants to You a perpetual,
++      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
++      (except as stated in this section) patent license to make, have made,
++      use, offer to sell, sell, import, and otherwise transfer the Work,
++      where such license applies only to those patent claims licensable
++      by such Contributor that are necessarily infringed by their
++      Contribution(s) alone or by combination of their Contribution(s)
++      with the Work to which such Contribution(s) was submitted. If You
++      institute patent litigation against any entity (including a
++      cross-claim or counterclaim in a lawsuit) alleging that the Work
++      or a Contribution incorporated within the Work constitutes direct
++      or contributory patent infringement, then any patent licenses
++      granted to You under this License for that Work shall terminate
++      as of the date such litigation is filed.
++
++   4. Redistribution. You may reproduce and distribute copies of the
++      Work or Derivative Works thereof in any medium, with or without
++      modifications, and in Source or Object form, provided that You
++      meet the following conditions:
++
++      (a) You must give any other recipients of the Work or
++          Derivative Works a copy of this License; and
++
++      (b) You must cause any modified files to carry prominent notices
++          stating that You changed the files; and
++
++      (c) You must retain, in the Source form of any Derivative Works
++          that You distribute, all copyright, patent, trademark, and
++          attribution notices from the Source form of the Work,
++          excluding those notices that do not pertain to any part of
++          the Derivative Works; and
++
++      (d) If the Work includes a "NOTICE" text file as part of its
++          distribution, then any Derivative Works that You distribute must
++          include a readable copy of the attribution notices contained
++          within such NOTICE file, excluding those notices that do not
++          pertain to any part of the Derivative Works, in at least one
++          of the following places: within a NOTICE text file distributed
++          as part of the Derivative Works; within the Source form or
++          documentation, if provided along with the Derivative Works; or,
++          within a display generated by the Derivative Works, if and
++          wherever such third-party notices normally appear. The contents
++          of the NOTICE file are for informational purposes only and
++          do not modify the License. You may add Your own attribution
++          notices within Derivative Works that You distribute, alongside
++          or as an addendum to the NOTICE text from the Work, provided
++          that such additional attribution notices cannot be construed
++          as modifying the License.
++
++      You may add Your own copyright statement to Your modifications and
++      may provide additional or different license terms and conditions
++      for use, reproduction, or distribution of Your modifications, or
++      for any such Derivative Works as a whole, provided Your use,
++      reproduction, and distribution of the Work otherwise complies with
++      the conditions stated in this License.
++
++   5. Submission of Contributions. Unless You explicitly state otherwise,
++      any Contribution intentionally submitted for inclusion in the Work
++      by You to the Licensor shall be under the terms and conditions of
++      this License, without any additional terms or conditions.
++      Notwithstanding the above, nothing herein shall supersede or modify
++      the terms of any separate license agreement you may have executed
++      with Licensor regarding such Contributions.
++
++   6. Trademarks. This License does not grant permission to use the trade
++      names, trademarks, service marks, or product names of the Licensor,
++      except as required for reasonable and customary use in describing the
++      origin of the Work and reproducing the content of the NOTICE file.
++
++   7. Disclaimer of Warranty. Unless required by applicable law or
++      agreed to in writing, Licensor provides the Work (and each
++      Contributor provides its Contributions) on an "AS IS" BASIS,
++      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
++      implied, including, without limitation, any warranties or conditions
++      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
++      PARTICULAR PURPOSE. You are solely responsible for determining the
++      appropriateness of using or redistributing the Work and assume any
++      risks associated with Your exercise of permissions under this License.
++
++   8. Limitation of Liability. In no event and under no legal theory,
++      whether in tort (including negligence), contract, or otherwise,
++      unless required by applicable law (such as deliberate and grossly
++      negligent acts) or agreed to in writing, shall any Contributor be
++      liable to You for damages, including any direct, indirect, special,
++      incidental, or consequential damages of any character arising as a
++      result of this License or out of the use or inability to use the
++      Work (including but not limited to damages for loss of goodwill,
++      work stoppage, computer failure or malfunction, or any and all
++      other commercial damages or losses), even if such Contributor
++      has been advised of the possibility of such damages.
++
++   9. Accepting Warranty or Additional Liability. While redistributing
++      the Work or Derivative Works thereof, You may choose to offer,
++      and charge a fee for, acceptance of support, warranty, indemnity,
++      or other liability obligations and/or rights consistent with this
++      License. However, in accepting such obligations, You may act only
++      on Your own behalf and on Your sole responsibility, not on behalf
++      of any other Contributor, and only if You agree to indemnify,
++      defend, and hold each Contributor harmless for any liability
++      incurred by, or claims asserted against, such Contributor by reason
++      of your accepting any such warranty or additional liability.
++
++   END OF TERMS AND CONDITIONS
++
++   APPENDIX: How to apply the Apache License to your work.
++
++      To apply the Apache License to your work, attach the following
++      boilerplate notice, with the fields enclosed by brackets "[]"
++      replaced with your own identifying information. (Don't include
++      the brackets!)  The text should be enclosed in the appropriate
++      comment syntax for the file format. We also recommend that a
++      file or class name and description of purpose be included on the
++      same "printed page" as the copyright notice for easier
++      identification within third-party archives.
++
++   Copyright [yyyy] [name of copyright owner]
++
++   Licensed under the Apache License, Version 2.0 (the "License");
++   you may not use this file except in compliance with the License.
++   You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
+diff --git a/licenses/MACaQ-NOTICE.txt b/licenses/MACaQ-NOTICE.txt
+new file mode 100644
+index 0000000..b6388f8
+--- /dev/null
++++ b/licenses/MACaQ-NOTICE.txt
+@@ -0,0 +1,13 @@
++MACaQ
++Copyright (c) 2026 the MACAQ authors
++
++This repository includes a modified copy of ggml-org/llama.cpp.
++Base revision: 8663224248, recorded by vendor import
++db743521be8899e04385177ff9dc479e375f36e6.
++Location: llamacpp/llama.cpp
++The original license is retained at llamacpp/llama.cpp/LICENSE.
++MACaQ modifications include calibrated activation transforms, GGUF metadata
++handling, and optional fused activation preprocessing.
++
++Third-party dependencies, model weights and datasets retain their own terms.
++The MACaQ Apache-2.0 license does not relicense those components or runtimes.
+diff --git a/macaq_refinement.py b/macaq_refinement.py
+new file mode 100644
+index 0000000..7383650
+--- /dev/null
++++ b/macaq_refinement.py
+@@ -0,0 +1,78 @@
++"""Fixed-scale greedy code refinement with 32-column Hessian blocks on Vulkan.
++
++The update and K code layouts follow huawei-csl/MACaQ's uniform_refine.py
++and gguf_codecs.py at 3810efca0b9e819c8eb51addd93c3c87225b7476 (Apache-2.0).
++"""
++import numpy as np
++
++
++BITS={'Q4_0':4,'Q8_0':8,'Q4_K':4,'Q5_K':5,'Q6_K':6}
++
++
++def f16(raw):
++    return raw.copy().view('<f2').astype(np.float32)
++
++
++def unpack(old, layout):
++    if layout in ('Q4_0','Q8_0'):
++        raw=old[:,2:]
++        codes=raw^128 if layout=='Q8_0' else np.concatenate((raw&15,raw>>4),axis=1)
++        return codes,np.repeat(f16(old[:,:2]),32,axis=1)
++    if layout=='Q6_K':
++        low=old[:,:128].reshape(-1,2,64)
++        high=old[:,128:192].reshape(-1,2,32)
++        lo=np.stack((low&15,low>>4),axis=2).reshape(-1,2,128)
++        hi=np.stack([(high>>j)&3 for j in (0,2,4,6)],axis=2).reshape(-1,2,128)
++        scales=f16(old[:,208:210])*old[:,192:208].view(np.int8)
++        return (lo|(hi<<4)).reshape(-1,256),np.repeat(scales,16,axis=1)
++    low=old[:,16 if layout=='Q4_K' else 48:].reshape(-1,4,32)
++    codes=np.stack((low&15,low>>4),axis=2).reshape(-1,8,32)
++    if layout=='Q5_K':
++        high=(old[:,None,16:48]>>np.arange(8,dtype=np.uint8)[None,:,None])&1
++        codes|=high<<4
++    small, high=old[:,4:8],old[:,12:16]
++    scales=np.concatenate((small&63,(high&15)|((small>>2)&48)),axis=1)
++    return codes.reshape(-1,256),np.repeat(f16(old[:,:2])*scales,32,axis=1)
++
++
++def pack(old, codes, layout):
++    result=old.copy()
++    if layout=='Q8_0':
++        result[:,2:]=codes^128
++    elif layout=='Q4_0':
++        result[:,2:]=codes[:,:16]|(codes[:,16:]<<4)
++    elif layout=='Q6_K':
++        low=(codes&15).reshape(-1,2,2,64)
++        hi=(codes>>4).reshape(-1,2,4,32)
++        result[:,:128]=(low[:,:,0]|(low[:,:,1]<<4)).reshape(-1,128)
++        result[:,128:192]=sum(hi[:,:,j]<<(2*j) for j in range(4)).reshape(-1,64)
++    else:
++        low=(codes&15).reshape(-1,4,2,32)
++        result[:,16 if layout=='Q4_K' else 48:]=(low[:,:,0]|(low[:,:,1]<<4)).reshape(-1,128)
++        if layout=='Q5_K':
++            hi=(codes>>4).reshape(-1,8,32)
++            result[:,16:48]=sum(hi[:,j]<<j for j in range(8))
++    return result
++
++
++def hessian(activations):
++    # ponytail: a full-width Hessian exceeds the working set on older Vulkan cards.
++    blocks=activations.reshape(len(activations),-1,32).transpose(1,0,2)
++    return (blocks.transpose(0,2,1)@blocks)/len(activations)
++
++
++def refine(converter,root,helper,weights,old,kind,decode,curvature,steps):
++    codes, scales=unpack(old,kind.name)
++    residual=decode(old,kind).reshape(weights.shape)-weights
++    if not np.any(residual):
++        return old
++    path,result=root/'input.bin',root/'output.bin'
++    with path.open('wb') as f:
++        for values in (residual,scales,codes,curvature):
++            values.astype('<f4',copy=False).tofile(f)
++    converter.run(helper,'macaq-flip',path,result,helper.with_name('macaq_flip.spv'),
++                  codes.size//32,steps,len(curvature),BITS[kind.name],0,0,1)
++    encoded=np.fromfile(result,dtype=np.uint8)
++    if encoded.size!=codes.size or (BITS[kind.name]<8 and np.any(encoded >= 1<<BITS[kind.name])):
++        raise RuntimeError('Vulkan вернул повреждённые коды MACaQ-R.')
++    return pack(old,encoded.reshape(codes.shape),kind.name)
+diff --git a/vulkan/macaq_flip.comp b/vulkan/macaq_flip.comp
+new file mode 100644
+index 0000000..2e4187f
+--- /dev/null
++++ b/vulkan/macaq_flip.comp
+@@ -0,0 +1,51 @@
++#version 450
++layout(local_size_x=64) in;
++layout(binding=0,std430) readonly buffer InputData { float source[]; };
++layout(binding=1,std430) writeonly buffer OutputData { uint result[]; };
++layout(push_constant) uniform Config {
++    uint blocks;
++    uint steps;
++    uint columns;
++    uint bits;
++    uint seed;
++    float target;
++} pc;
++
++// Block-local port of the fixed-scale MACaQ-R greedy update.
++void main() {
++    uint block=gl_GlobalInvocationID.x;
++    if (block>=pc.blocks) return;
++    uint stride=32u*pc.blocks;
++    uint pos=32u*block;
++    uint h=3u*stride+1024u*(block%pc.columns);
++    int codes[32];
++    float gradient[32];
++    for (uint j=0u;j<32u;++j) {
++        codes[j]=int(source[2u*stride+pos+j]);
++        gradient[j]=0.0;
++        for (uint i=0u;i<32u;++i) gradient[j]+=source[pos+i]*source[h+32u*i+j];
++    }
++    int top=(1<<int(pc.bits))-1;
++    for (uint step=0u;step<pc.steps;++step) {
++        float change=-1e-12;
++        float delta=0.0;
++        uint selected=0u;
++        int direction=0;
++        for (uint j=0u;j<32u;++j) {
++            float scale=source[stride+pos+j];
++            float square=scale*scale*source[h+33u*j];
++            float linear=2.0*scale*gradient[j];
++            float up=square+linear, down=square-linear;
++            if (codes[j]<top && up<change) { change=up; delta=scale; selected=j; direction=1; }
++            if (codes[j]>0 && down<change) { change=down; delta=-scale; selected=j; direction=-1; }
++        }
++        if (direction==0) break;
++        codes[selected]+=direction;
++        for (uint j=0u;j<32u;++j) gradient[j]+=delta*source[h+32u*selected+j];
++    }
++    for (uint word=0u;word<8u;++word) {
++        uint i=4u*word;
++        result[8u*block+word]=uint(codes[i]) | (uint(codes[i+1u])<<8u) |
++                              (uint(codes[i+2u])<<16u) | (uint(codes[i+3u])<<24u);
++    }
++}
+diff --git a/vulkan/vulkan-gsq.cpp b/vulkan/vulkan-gsq.cpp
+index 4602192..a5a097d 100644
+--- a/vulkan/vulkan-gsq.cpp
++++ b/vulkan/vulkan-gsq.cpp
+@@ -110,21 +110,23 @@ int wmain(int argc, wchar_t ** argv) try {
+     const bool loss=std::wcscmp(argv[1],L"loss")==0;
+     const bool actcal=std::wcscmp(argv[1],L"actcal")==0;
+     const bool actcal_k=std::wcscmp(argv[1],L"actcal-k")==0;
+-    if (!rco && !loss && !actcal && !actcal_k && std::wcscmp(argv[1],L"gsq")!=0) throw std::runtime_error("unknown mode");
++    const bool flip=std::wcscmp(argv[1],L"macaq-flip")==0;
++    if (!rco && !loss && !actcal && !actcal_k && !flip && std::wcscmp(argv[1],L"gsq")!=0) throw std::runtime_error("unknown mode");
+     wchar_t * target_end=nullptr;
+     const float target=std::wcstof(argv[10],&target_end);
+     if (target_end==argv[10] || *target_end || !std::isfinite(target)) throw std::runtime_error("invalid target");
+-    const Parameters pc={integer(argv[5],actcal?262144:(actcal_k?32768:(rco?8:4096))),integer(argv[6],actcal?8:128),integer(argv[7],actcal?2048:(actcal_k?256:32)),
++    const Parameters pc={integer(argv[5],actcal||flip?262144:(actcal_k?32768:(rco?8:4096))),integer(argv[6],actcal||flip?8:128),integer(argv[7],actcal||flip?2048:(actcal_k?256:32)),
+                          integer(argv[8],8),integer(argv[9],UINT32_MAX),target};
+     const unsigned repeats=integer(argv[11],16);
+     if (!pc.blocks || !pc.samples || (rco && ((pc.bits!=3 && pc.bits!=4) || pc.steps<2)) ||
+         (actcal && (pc.bits!=4 && pc.bits!=8)) ||
+         (actcal_k && (pc.bits<1 || pc.bits>2 || pc.blocks%pc.samples!=0)) ||
+-        (!rco && !loss && !actcal && !actcal_k && pc.bits!=2 && pc.bits!=3 && pc.bits!=4 && pc.bits!=6 && pc.bits!=8) ||
++        (flip && ((pc.bits!=4 && pc.bits!=5 && pc.bits!=6 && pc.bits!=8) || pc.blocks%pc.samples!=0)) ||
++        (!rco && !loss && !actcal && !actcal_k && !flip && pc.bits!=2 && pc.bits!=3 && pc.bits!=4 && pc.bits!=6 && pc.bits!=8) ||
+         repeats==0) throw std::runtime_error("parameters outside the supported range");
+-    const size_t input_floats=actcal_k ? (size_t(pc.blocks)*(pc.bits+1)+pc.samples)*256 :
++    const size_t input_floats=flip ? size_t(pc.blocks)*96+pc.samples*1024 : actcal_k ? (size_t(pc.blocks)*(pc.bits+1)+pc.samples)*256 :
+         (actcal ? size_t(pc.blocks)*33+pc.samples*32 : (loss ? size_t(pc.blocks)*512 : size_t(pc.blocks)*(rco?pc.bits:256)*(1+pc.samples)));
+-    const size_t output_floats=actcal_k ? size_t(pc.blocks)*pc.bits :
++    const size_t output_floats=flip ? size_t(pc.blocks)*8 : actcal_k ? size_t(pc.blocks)*pc.bits :
+         (actcal ? size_t(pc.blocks)*(pc.bits==4?5:9) : (loss ? pc.blocks : (rco ? pc.blocks+4+pc.blocks*pc.bits : size_t(pc.blocks)*266)));
+     const vk::DeviceSize input_size=input_floats*sizeof(float),output_size=output_floats*sizeof(float);
+     std::ifstream input_file(std::filesystem::path(argv[2]),std::ios::binary|std::ios::ate);
+@@ -226,7 +228,7 @@ int wmain(int argc, wchar_t ** argv) try {
+         cmd.bindPipeline(vk::PipelineBindPoint::eCompute,*pipeline);
+         cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute,*pl,0,set,{});
+         cmd.pushConstants(*pl,vk::ShaderStageFlagBits::eCompute,0,sizeof(pc),&pc);
+-        cmd.dispatch((actcal || actcal_k)?(pc.blocks+63)/64:(rco?1:pc.blocks),1,1);
++        cmd.dispatch((actcal || actcal_k || flip)?(pc.blocks+63)/64:(rco?1:pc.blocks),1,1);
+         cmd.writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe,*queries,1);
+         barrier(compute,transfer,vk::AccessFlagBits::eShaderWrite,vk::AccessFlagBits::eTransferRead);
+         cmd.copyBuffer(*b.buffer,*staged.buffer,vk::BufferCopy(0,0,output_size));
