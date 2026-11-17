@@ -20,4 +20,4 @@ Calibration uses Vulkan on supported AMD Polaris devices. Use the matching origi
 
 The bundled MACaQ-R adaptation uses 32-column Hessian blocks and the existing inference kernels. [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO) · [MACaQ](https://github.com/huawei-csl/MACaQ)
 
-[RX 580 comparison](benchmarks/2026-11-17-macaq-r-media-rx580.json) · [All benchmarks](benchmarks/) · [Patches](patches/) · [License and components](NOTICE.md)
+[Whole-checkpoint RX 580 comparison](benchmarks/2026-11-17-whole-gsq-rco-rx580.json) · [All benchmarks](benchmarks/) · [Patches](patches/) · [License and components](NOTICE.md)
