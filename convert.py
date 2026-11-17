@@ -828,8 +828,7 @@ def gui(source=''):
     output_value = tk.StringVar()
     kind_value = tk.StringVar(value='Автоматически')
     quantization_value = tk.StringVar(value='Q8')
-    optimize_value = tk.BooleanVar(value=False)
-    flip_value = tk.BooleanVar(value=False)
+    method_value = tk.StringVar(value='Выкл')
     format_value = tk.StringVar()
     hardware_value = tk.StringVar(value='Определение оборудования…')
     advice_value = tk.StringVar()
@@ -840,29 +839,39 @@ def gui(source=''):
     job = None
     closing = False
 
-    def selection():
+    def selection(path):
         value = quantization_value.get()
-        if not optimize_value.get():
-            return value
-        item = USER_DIRECTORY / Path(input_value.get().strip().strip('"')).expanduser()
+        method=method_value.get()
         try:
-            if item.suffix.lower() == '.json' and json.loads(item.read_text(encoding='utf-8-sig')).get('format') == 'gguf-activation-calibration-v1':
-                return 'ACTCAL-' + value
-            if item.suffix.lower() == '.gguf':
-                layout, tier = dominant_quantization(item)
-                if layout and value == f'Q{tier}':
-                    return 'ACTCAL-' + value
+            if path.suffix.lower()=='.json':
+                plan=json.loads(path.read_text(encoding='utf-8-sig'))
+                if plan.get('format')=='gguf-activation-calibration-v1':
+                    method='MACaQ-R' if plan.get('targets',{}).get(value[-1],{}).get('refiner')=='macaq-r' else 'ACTCAL'
+                else:
+                    method='GSQ/RCO'
+            elif method=='Авто':
+                tier=quantized_tier(path) if path.suffix.lower()=='.gguf' else None
+                method='ACTCAL' if value==f'Q{tier}' else 'GSQ/RCO'
         except (OSError, ValueError, TypeError, KeyError, AttributeError):
-            pass
-        return 'GSQ-RCO-' + value
+            method='GSQ/RCO'
+        if method in ('ACTCAL','MACaQ-R'):
+            return 'ACTCAL-'+value, 'macaq-r' if method=='MACaQ-R' else 'actcal'
+        return ('GSQ-RCO-'+value if method=='GSQ/RCO' else value), 'actcal'
 
     def refresh(*_):
         nonlocal guessed
-        resolved = output_quantization(selection())
-        format_value.set(resolved)
-        advice_value.set('')
         value = input_value.get().strip().strip('"')
         path = USER_DIRECTORY / Path(value).expanduser()
+        manifest=path.suffix.lower()=='.json'
+        if manifest:
+            method_value.set('Из манифеста')
+        elif method_value.get()=='Из манифеста':
+            method_value.set('Выкл')
+        method_box.configure(state='disabled' if manifest else 'readonly')
+        chosen,refiner=selection(path)
+        resolved = 'MACaQ-R-'+quantization_value.get() if refiner=='macaq-r' else output_quantization(chosen)
+        format_value.set(resolved)
+        advice_value.set('')
         if not value or not path.exists():
             kind_value.set('Автоматически')
             return
@@ -873,16 +882,16 @@ def gui(source=''):
                 kind_value.set(route(path, 'auto')[2])
             except (ValueError, OSError, KeyError, RuntimeError):
                 kind_value.set('Требуется проверка файла')
-        update_estimate(path)
+        update_estimate(path,chosen in CALIBRATIONS)
         suggested = str(suggested_output(path, resolved))
         if not output_value.get() or output_value.get() == guessed:
             output_value.set(suggested)
         guessed = suggested
 
-    def update_estimate(path):
+    def update_estimate(path,calibrating):
         try:
             role = kind_value.get()
-            if optimize_value.get():
+            if calibrating:
                 tier = quantization_value.get()[-1]
                 if path.suffix.lower() == '.json':
                     plan = json.loads(path.read_text(encoding='utf-8-sig'))
@@ -941,10 +950,8 @@ def gui(source=''):
 
     def select_input(folder=False):
         value = filedialog.askdirectory(initialdir=USER_DIRECTORY) if folder else filedialog.askopenfilename(initialdir=USER_DIRECTORY,
-            filetypes=[('Модели и манифест GSQ-RCO', '*.gguf *.safetensors *.sft *.ckpt *.bin *.json'), ('Все файлы', '*.*')])
+            filetypes=[('Модели и манифесты', '*.gguf *.safetensors *.sft *.ckpt *.bin *.json'), ('Все файлы', '*.*')])
         if value:
-            if Path(value).suffix.lower() == '.json':
-                optimize_value.set(True)
             output_value.set('')
             input_value.set(value)
             refresh()
@@ -962,12 +969,15 @@ def gui(source=''):
         if not source:
             messagebox.showerror('GGUF', 'Выберите файл или папку модели.')
             return
-        quantization = selection()
-        if optimize_value.get():
+        original=(USER_DIRECTORY/Path(source).expanduser()).resolve()
+        quantization,refiner = selection(original)
+        output_format='MACaQ-R-'+quantization_value.get() if refiner=='macaq-r' else quantization
+        calibrating=quantization in CALIBRATIONS
+        if calibrating:
             if Path(source).suffix.lower() != '.json' and (card is None or not card.gsq):
                 messagebox.showerror('GSQ/RCO', 'Автокалибровке нужен поддерживаемый Vulkan GPU. Обычная конвертация доступна.')
                 return
-        automatic = optimize_value.get() and Path(source).suffix.lower() == '.gguf'
+        automatic = calibrating and original.suffix.lower()=='.gguf'
         prompt = None
         profile = None
         reference = None
@@ -975,13 +985,15 @@ def gui(source=''):
             if 'AVX2' not in card.instructions:
                 messagebox.showerror('GSQ/RCO', 'Встроенный сбор активаций использует AVX2. Для готовых активаций откройте манифест.')
                 return
-            original = (USER_DIRECTORY / Path(source).expanduser()).resolve()
             try:
                 preserve = quantized_tier(original) == int(quantization[-1])
             except (OSError,ValueError,KeyError) as error:
                 messagebox.showerror('GSQ/RCO',str(error))
                 return
-            if flip_value.get() and (quantization not in ACTIVATION_FORMATS or quantization in ('ACTCAL-Q2','ACTCAL-Q3')):
+            if quantization in ACTIVATION_FORMATS and not preserve:
+                messagebox.showerror('Калибровка','Для ACTCAL и MACaQ-R выберите текущий уровень кванта файла.')
+                return
+            if refiner=='macaq-r' and quantization in ('ACTCAL-Q2','ACTCAL-Q3'):
                 messagebox.showerror('MACaQ-R','Выберите текущий формат Q4_0, Q8_0, Q4_K, Q5_K или Q6_K.')
                 return
             if preserve:
@@ -1010,14 +1022,13 @@ def gui(source=''):
                 if not path:
                     return
                 profile = Path(path).resolve(strict=True)
-        elif optimize_value.get() and Path(source).suffix.lower() != '.json':
+        elif calibrating and original.suffix.lower() != '.json':
             messagebox.showerror('GSQ/RCO', 'Для калибровки выберите GGUF или JSON-манифест.')
             return
         job = Conversion(lambda line: events.put(('log', line)),
                          lambda label, done, total: events.put(('progress', (label, done, total))))
         start_button.config(state='disabled')
         cancel_button.config(state='normal')
-        refiner='macaq-r' if flip_value.get() else 'actcal'
 
         def work():
             success = False
@@ -1029,7 +1040,7 @@ def gui(source=''):
                         payload = automatic_gsq_plan(original, int(quantization[-1]), prompt, profile, reference,
                                                      activation=quantization in ACTIVATION_FORMATS,refiner=refiner)
                         plan.write_text(json.dumps(payload, ensure_ascii=False), encoding='utf-8')
-                        job.convert(plan, output or suggested_output(original, quantization), quantization=quantization)
+                        job.convert(plan, output or suggested_output(original, output_format), quantization=quantization)
                 else:
                     job.convert(source, output, quantization=quantization)
                 success = True
@@ -1111,14 +1122,10 @@ def gui(source=''):
     format_box.grid(row=3, column=1, sticky='w', padx=4)
     format_box.bind('<<ComboboxSelected>>', refresh)
     ttk.Label(window, textvariable=format_value).grid(row=2, column=2, columnspan=2, sticky='w', padx=4)
-    ttk.Checkbutton(window, text='Калибровка весов', variable=optimize_value, command=refresh).grid(row=3, column=2, sticky='w', padx=4)
-
-    def select_flip():
-        if flip_value.get():
-            optimize_value.set(True)
-        refresh()
-
-    ttk.Checkbutton(window,text='MACaQ-R',variable=flip_value,command=select_flip).grid(row=3,column=3,sticky='w',padx=4)
+    ttk.Label(window,text='Калибровка').grid(row=3,column=2,sticky='e',padx=4)
+    method_box=ttk.Combobox(window,textvariable=method_value,values=('Выкл','Авто','ACTCAL','GSQ/RCO','MACaQ-R'),width=16,state='readonly')
+    method_box.grid(row=3,column=3,sticky='w',padx=4)
+    method_box.bind('<<ComboboxSelected>>',refresh)
     ttk.Label(window, text='Оборудование').grid(row=4, column=0, sticky='w', padx=8)
     ttk.Label(window, textvariable=hardware_value, wraplength=660).grid(row=4, column=1, columnspan=3, sticky='w', padx=4, pady=3)
     ttk.Label(window, textvariable=advice_value, wraplength=660).grid(row=5, column=1, columnspan=3, sticky='w', padx=4, pady=3)
@@ -1132,8 +1139,6 @@ def gui(source=''):
     console = ScrolledText(window, wrap='word')
     console.grid(row=9, column=0, columnspan=4, sticky='nsew', padx=8, pady=(0, 8))
     window.protocol('WM_DELETE_WINDOW', close)
-    if source and Path(source).suffix.lower() == '.json':
-        optimize_value.set(True)
     refresh()
     threading.Thread(target=lambda: events.put(('hardware', hardware.detect(HARDWARE_HELPER))), daemon=True).start()
     poll()

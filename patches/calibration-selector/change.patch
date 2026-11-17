@@ -1,0 +1,503 @@
+diff --git a/README.md b/README.md
+index cab6381..4c76d21 100644
+--- a/README.md
++++ b/README.md
+@@ -1,101 +1,23 @@
+-# GGUF Converter for Windows
++# GGUF Converter
+ 
+-[Русский](README.ru.md) · [Download the portable EXE](https://github.com/aktalascloud/gguf-converter/releases/latest)
++[Русский](README.ru.md) · [Download for Windows](https://github.com/aktalascloud/gguf-converter/releases/latest) · [CLI manifests and build](docs/calibration.md)
+ 
+-Convert local model weights to **Q2, Q4, Q6 or Q8** on Windows 10/11 x64. Open `GGUF-Converter.exe`, select a supported file or Hugging Face directory, and choose the quantization. The window detects the model and hardware, estimates the resulting file size before conversion, and shows the active stage and exact size after conversion. Python and the conversion tools are bundled.
++A single Windows EXE for converting text and media models to GGUF. It bundles Python, detects the model type and estimates file size and GPU memory use.
+ 
+-| Input | Conversion path |
+-|---|---|
+-| Text GGUF | llama.cpp, including sharded models and supported requantization |
+-| Local Hugging Face folder | Supported architectures with config, tokenizer and weights. FP32, FP16, BF16, supported FP8, GPTQ, AWQ GEMM 4-bit with zero points, supported compressed-tensors layouts and bitsandbytes NF4/FP4 or row-wise INT8 |
+-| Diffusion weights | GGUF, Safetensors and CKPT through stable-diffusion.cpp. Includes scaled FP8 E4M3/E5M2 and Comfy INT8 tensorwise Safetensors. Wan architecture metadata is preserved or detected from the tensor names. |
+-| Packed ComfyUI weights | Supported tensorwise INT8, scaled FP8, and W4A8 layouts with their metadata |
++Open a GGUF, Safetensors file or Hugging Face model folder. Choose Q2, Q4, Q6 or Q8. Supported source packing includes scaled INT8, FP8 and selected INT4 schemes with their metadata.
+ 
+-The converter writes a separate GGUF and protects existing files from replacement. Tensors that cannot use the chosen block layout retain a compatible representation. New or proprietary architectures and packing schemes require a matching loader. Hugging Face K-quant conversion may stage an FP32 GGUF. Some scaled diffusion checkpoints also need temporary FP32 space.
++## Calibration
+ 
+-### Target hardware
++| Switch | Use when |
++| --- | --- |
++| **Off** | You want ordinary quantization. |
++| **Auto** | You want ACTCAL at the current quant tier or GSQ/RCO for a different tier. |
++| **ACTCAL** | You want to fit block codes or scales while preserving each tensor type. |
++| **GSQ/RCO** | You want to try quant assignments under a size budget. |
++| **MACaQ-R** | You want to refine codes while retaining the current GGUF layout and scales. |
+ 
+-CPU instructions and GPU memory are detected for the information panel and memory estimates. Q4 defaults to `Q4_K` in the window. Choose `--quantization Q4_0` in the CLI for that exact layout. The inference engine applies AVX2 and Vulkan kernels. An F16 KV-cache estimate is available for recognized text architectures. Separate component weights and inference buffers add to memory use. [GGML runtime repacking](https://github.com/ggml-org/llama.cpp/blob/master/include/llama.h) · [Vulkan memory budget](https://docs.vulkan.org/refpages/latest/refpages/source/VK_EXT_memory_budget.html)
++Calibration uses Vulkan on supported AMD Polaris devices. Use the matching original checkpoint where available. ACTCAL can also audit an exact F32 reconstruction of the current GGUF and preserve its bytes. A matching KoboldCpp profile can capture photo, video and YuE2 activations. [Calibration guide](docs/calibration.md)
+ 
+-## Vulkan GSQ-RCO preview
++The bundled MACaQ-R adaptation uses 32-column Hessian blocks and the existing inference kernels. [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO) · [MACaQ](https://github.com/huawei-csl/MACaQ)
+ 
+-Enable **Weight calibration** and open a media GGUF or a `gguf-gsq-rco-vulkan-v1` manifest. The bundled calibration uses Vulkan shaders on a supported AMD Polaris GPU. The media worker needs AVX2 to record activations. A matching local KoboldCpp profile supplies companion weights automatically, including when the selected GGUF is its text encoder. Mixed-layout GSQ/RCO from a directly selected GGUF calibrates two recognized attention projections. A manifest can cover up to eight matrices and supports Q3 through the CLI. [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO)
+-
+-```json
+-{
+-  "format": "gguf-gsq-rco-vulkan-v1",
+-  "base": "model.gguf",
+-  "targets": {
+-    "3": {
+-      "max_tensor_bytes": 1000000000,
+-      "tensors": {
+-        "blk.0.attn_q.weight": "attention-input.npy",
+-        "blk.0.ffn_up.weight": "mlp-input.npy"
+-      }
+-    }
+-  }
+-}
+-```
+-
+-Paths are relative to the manifest. Use a NumPy `.npy` array of 2–32 activation rows for a matrix or `null` for capture. For automatic capture add `"capture": {"prompt": "…", "profile": "photo.kcpps"}`. A profile is optional for standalone diffusion models. Use `capture.base_part` to replace an encoder such as `sdclip1` and `capture.profile_root` to resolve relative paths in the profile. Enable `"model_loss": true` to rerank the feasible GSQ/RCO and rounding candidates by pixel MSE on a complete calibration render. The measured loss covers the complete output. GSQ still learns per-matrix weights, and RCO proposes a bounded set of configurations under an exact tensor-byte budget.
+-
+-Earlier local-batch calibration evidence is recorded by binary SHA. [v1.2.0 RX 580 measurements](benchmarks/2026-11-16-rx580.json)
+-
+-The v1.3.0 RX 580 check covers automatic capture on ABDM and Wan, photo generation without upscaling, a 480p five-frame clip, and GGUF sizes for all four standard formats. [v1.3.0 results](benchmarks/2026-11-16-v130-rx580.json)
+-
+-### Calibration with the original tensor layouts
+-
+-Enable weight calibration, select the existing tier and provide the matching GGUF or Safetensors checkpoint. ACTCAL uses activation-weighted least squares on Vulkan. For Q4_0 and Q8_0 it fits codes and scales. For Q2_K through Q6_K it fits superblock scales with the existing packed codes and subscales. Candidate rows are selected by projection error on a separate subset of the recorded activations. Tensor types, model metadata and payload size are preserved.
+-
+-CLI ACTCAL tiers are Q2, Q3, Q4, Q5, Q6 and Q8. Use `gguf-activation-calibration-v1` with `base`, `reference`, and `capture`. For a mixed Q4_K_M encoder, set `"4": {"all": true}` under `targets` to preserve each matrix's Q4_K or Q6_K type. For explicit selection, set `tensors` to names mapped to `.npy` files or `null`. Safetensors references support common floating formats, scaled INT8 and W4A8 INT4 with scales and codebooks. The earlier GSQ/RCO workflow has its own manifest.
+-
+-For YuE2, the converter detects the music GGUF and looks for a matching KoboldCpp music profile. A manifest can set `capture.base_part` to `musicllm` and provide `musicvae` in `capture.models`. `capture.prompt` is the musical style, and `capture.lyrics` optionally supplies training lyrics. The capture worker records Vulkan inputs to AR and NAR matrix products. Lookup tables and tensors unused by the calibration request keep their original bytes.
+-
+-When only a quantized GGUF is available, select its current tier, enable weight calibration and choose **No** in the reference checkpoint dialog. The CLI equivalent is `"reference": null`. The round trip expands weights to F32 in bounded chunks, runs the requantizer and checks activation projections. The original GGUF already has zero reconstruction error against those F32 values, so the published output retains its exact bytes.
+-
+-Enable **MACaQ-R** to fit stored codes with fixed scales using a Vulkan adaptation of the greedy refinement. CLI manifests set `"refiner": "macaq-r"` inside the target. Supported layouts are Q4_0, Q8_0, Q4_K, Q5_K and Q6_K. The adaptation uses 32-column Hessian blocks and accepts rows on the held-out activation subset. These GGUFs use the existing inference kernels and activation precision. [MACaQ paper](https://arxiv.org/abs/2611.10649) · [MACaQ-R guide](https://github.com/huawei-csl/MACaQ/blob/3810efca0b9e819c8eb51addd93c3c87225b7476/llamacpp/README.md#macaq-r)
+-
+-The RX 580 trials covered 168 UMT5 projections and 395 YuE2 matrices. The stock and calibrated generation time ranges overlapped in the fixed-profile repetitions. The recorded visual and vocal content checks are included with the timings. [UMT5 and YuE2 measurements](benchmarks/2026-11-17-umt5-yue2-rx580.json)
+-
+-## GSQ-RCO assembly
+-
+-Select **GSQ-RCO-Q2**, **GSQ-RCO-Q3** or **GSQ-RCO-Q4** and open a JSON manifest. The converter copies packed tensors from previously GSQ-optimized GGUF variants according to a per-tensor RCO assignment. Run GSQ calibration and the RCO search separately. The bundled EXE handles the assembly offline. [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO)
+-
+-```json
+-{
+-  "format": "gguf-gsq-rco-v1",
+-  "base": "model-base.gguf",
+-  "variants": {
+-    "q2": "model-gsq-q2.gguf",
+-    "q3": "model-gsq-q3.gguf"
+-  },
+-  "targets": {
+-    "2": {
+-      "tensors": {
+-        "blk.0.attn_q.weight": "q2",
+-        "blk.0.ffn_up.weight": "q3"
+-      }
+-    }
+-  }
+-}
+-```
+-
+-Paths are relative to the manifest. Add one entry under each target you want to assemble. Each assignment value names a file in the variants map. Tensors outside the assignment come from the base file. The optional max_tensor_bytes applies to the total tensor payload, including tensors kept from the base. The converter prints the resulting bits per parameter.
+-
+-To run a conversion from PowerShell, pass `--cli` and wait for the process to exit.
+-
+-```powershell
+-Start-Process -FilePath '.\GGUF-Converter.exe' -ArgumentList '--cli "D:\Models\My model" -q Q4_0 -t 8' -Wait -PassThru
+-```
+-
+-For independent targets use `--gpu vulkan --cpu avx`, or `--gpu pascal --cpu avx2`. Use `-q Q4` for target-aware selection. An explicit `-q Q4_K` or `-q Q4_0` fixes the tensor format.
+-
+-To build from source, run the following on Windows with Python 3.12+ and the Windows .NET Framework C# compiler available. The build uses the pinned checksums in `dependencies.lock.json` and writes the EXE to `dist/`.
+-
+-```powershell
+-py -3.12 -I -B portable_build.py
+-```
+-
+-To include the Vulkan shaders and helper, pass all four options `--cxx`, `--glslc`, `--vulkan-include` and `--vulkan-import`. Point them to the MinGW-w64 `g++.exe`, Vulkan SDK `glslc.exe`, SDK include directory and `vulkan-1.lib`. Pass `--native-capture` with the directory produced by `vulkan/build_capture.py` to enable the embedded media worker. [Corresponding source and notices](NOTICE.md)
+-
+-[License](LICENSE.md) · [Corresponding sources and component notices](NOTICE.md).
++[Benchmarks](benchmarks/) · [Patches](patches/) · [License and components](NOTICE.md)
+diff --git a/README.ru.md b/README.ru.md
+index 0f281cf..2f5e9e8 100644
+--- a/README.ru.md
++++ b/README.ru.md
+@@ -1,81 +1,23 @@
+-# Конвертер GGUF для Windows
++# Конвертер GGUF
+ 
+-[English](README.md) · [Скачать портативный EXE](https://github.com/aktalascloud/gguf-converter/releases/latest)
++[English](README.md) · [Скачать для Windows](https://github.com/aktalascloud/gguf-converter/releases/latest) · [Манифесты CLI и сборка](docs/calibration.md)
+ 
+-Откройте `GGUF-Converter.exe`, выберите поддерживаемый файл весов или папку Hugging Face и укажите **Q2, Q4, Q6 или Q8**. Тип модели определяется по метаданным и структуре тензоров. Окно показывает распознанный тип, формат GGUF и точный размер готового файла. Python и инструменты конвертации включены в EXE для Windows 10/11 x64.
++Один портативный EXE для конвертации текстовых и медиамоделей в GGUF. Python встроен. Конвертер распознаёт тип модели, показывает прогресс, примерный размер результата и оценку памяти GPU.
+ 
+-| Вход | Поддержка |
+-|---|---|
+-| Текстовый GGUF | Переквантование через llama.cpp, включая разделённые GGUF |
+-| Папка Hugging Face | Поддерживаемые архитектуры с конфигурацией, токенизатором и весами. FP32, FP16, BF16, поддерживаемый FP8, GPTQ, AWQ GEMM 4-bit с zero points, поддерживаемые схемы compressed-tensors и bitsandbytes NF4/FP4 или построчный INT8 |
+-| Диффузионные веса | GGUF, Safetensors и CKPT через stable-diffusion.cpp. FP8 E4M3/E5M2 с масштабами и Comfy INT8 tensorwise в Safetensors. Метка Wan сохраняется или определяется по именам тензоров. |
+-| Упакованные веса ComfyUI | Поддерживаемые схемы INT8 tensorwise, FP8 с масштабами и W4A8. Схема выбирается автоматически. |
++Выберите GGUF, Safetensors или папку модели Hugging Face, затем Q2, Q4, Q6 или Q8. Для INT8, FP8 и поддерживаемых схем INT4 нужны метаданные упаковки и масштабы.
+ 
+-Результат записывается в отдельный GGUF с защитой от перезаписи существующих файлов. Часть тензоров сохраняет точность с плавающей запятой. Для Q4_0 из папки Hugging Face требуется место под промежуточный FP32 GGUF. Для некоторых диффузионных весов с отдельными масштабами также требуется временное место на диске результата.
++## Калибровка
+ 
+-### Целевой бэкенд
++| Переключатель | Для чего |
++| --- | --- |
++| **Выкл** | Обычная конвертация. |
++| **Авто** | ACTCAL для текущего кванта или GSQ/RCO для другой разрядности. |
++| **ACTCAL** | Подбор кодов или масштабов при сохранении типов тензоров. |
++| **GSQ/RCO** | Подбор сочетания типов тензоров под бюджет размера. |
++| **MACaQ-R** | Уточнение кодов в текущем GGUF с фиксированными масштабами. |
+ 
+-GPU, VRAM и инструкции CPU определяются для справки и оценки памяти. Q4 в окне означает `Q4_K`. Точный `Q4_0` можно указать через CLI. Ядра AVX2 и Vulkan выбирает движок. Окно показывает примерный размер, прогресс и рекомендуемый квант с запасом памяти. Для распознанных текстовых моделей оценивается контекст с KV-кэшем F16. [Перепаковка GGML](https://github.com/ggml-org/llama.cpp/blob/master/include/llama.h) · [Бюджет Vulkan](https://docs.vulkan.org/refpages/latest/refpages/source/VK_EXT_memory_budget.html)
++Калибровка работает через Vulkan на поддерживаемых AMD Polaris. Выбирайте исходный чекпойнт той же версии. При его отсутствии ACTCAL проверяет обратную конвертацию относительно F32 из текущего GGUF. Манифест задаёт метод калибровки. Для фото, видео и YuE2 активации может собрать подходящий профиль KoboldCpp. [Инструкция](docs/calibration.md)
+ 
+-## GSQ-RCO на Vulkan
++Встроенная адаптация MACaQ-R использует гессиан блоками по 32 столбца и штатные ядра генерации GGUF. [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO) · [MACaQ](https://github.com/huawei-csl/MACaQ)
+ 
+-Включите **«Калибровка весов»** и задайте промпт. Встроенные шейдеры работают через Vulkan на поддерживаемой AMD Polaris. Запись активаций требует AVX2. Совпадающий профиль KoboldCpp подставит связанные веса, в том числе при выборе его энкодера. GSQ/RCO со смешанными типами при выборе GGUF начинает с двух проекций. Манифест позволяет выбрать до восьми матриц и запустить Q3 через CLI. [Пример манифеста](README.md#vulkan-gsq-rco-preview) · [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO)
+-
+-В манифесте укажите `.npy` с активациями или `null` для автозаписи. Для автозаписи нужен объект `capture` с полем `prompt`. Матрицы должны иметь ширину, кратную 256. Бюджет учитывает все тензоры GGUF. При `model_loss: true` программа выполняет целый тестовый рендер каждого кандидата и выбирает по MSE изображения или кадров. GSQ обучает выбранные матрицы, а RCO ограничивает список конфигураций бюджетом.
+-
+-Замеры предыдущей версии привязаны к SHA. [Данные v1.2.0 на RX 580](benchmarks/2026-11-16-rx580.json)
+-
+-В v1.3.0 проверены автозапись ABDM и Wan на RX 580, фото без апскейла, пять кадров 480p и размеры GGUF для четырёх стандартных форматов. [Данные v1.3.0](benchmarks/2026-11-16-v130-rx580.json)
+-
+-### Калибровка с сохранением кванта
+-
+-Включите калибровку, выберите текущий квант и укажите GGUF или Safetensors того же чекпойнта. ACTCAL использует взвешенные наименьшие квадраты на Vulkan. Для Q4_0 и Q8_0 подбираются коды и масштабы. Для Q2_K–Q6_K подбираются масштабы суперблоков с сохранением упакованных кодов и подмасштабов. Результат выбирается по ошибке проекций на отдельной части записанных активаций. Типы, объём тензоров и метаданные сохраняются.
+-
+-CLI принимает ACTCAL-Q2/Q3/Q4/Q5/Q6/Q8 и манифест `gguf-activation-calibration-v1`. Для смешанного Q4_K_M задайте `"4": {"all": true}` в `targets`. Каждая матрица сохраняет свой формат Q4_K или Q6_K. Поле `tensors` принимает `.npy` или `null` по имени. Поддерживаются вещественные Safetensors, INT8 с масштабами и INT4 W4A8 с кодовой книгой и масштабами. Для GSQ/RCO используется отдельный манифест.
+-
+-YuE2 определяется по GGUF. Конвертер ищет соответствующий профиль музыки. В манифесте можно указать `capture.base_part` со значением `musicllm` и `musicvae` в `capture.models`. `capture.prompt` задаёт стиль, `capture.lyrics` — текст песни по желанию. Записываются входы матричных умножений AR и NAR на Vulkan. Таблицы lookup и тензоры вне калибровочного прогона сохраняют исходные данные.
+-
+-Если есть только квантованный GGUF, выберите его текущий квант, включите калибровку и нажмите **«Нет»** в диалоге выбора исходника. В CLI укажите `"reference": null`. Конвертер распаковывает веса блоками в F32, проверяет обратное квантование на активациях и сохраняет побайтовую копию GGUF. Для этой опоры исходные веса уже дают нулевую ошибку.
+-
+-Режим **MACaQ-R** уточняет коды при фиксированных масштабах. Для CLI укажите `"refiner": "macaq-r"` внутри цели манифеста. Поддерживаются Q4_0, Q8_0, Q4_K, Q5_K и Q6_K. Адаптация рассчитывает гессиан по группам из 32 столбцов на активациях и выполняет жадный подбор на Vulkan. При генерации работают привычные GGUF-ядра с обычной для них точностью активаций. [Статья MACaQ](https://arxiv.org/abs/2611.10649) · [Руководство MACaQ-R](https://github.com/huawei-csl/MACaQ/blob/3810efca0b9e819c8eb51addd93c3c87225b7476/llamacpp/README.md#macaq-r)
+-
+-В проверке на RX 580 обработаны 168 проекций UMT5 и 395 матриц YuE2. В повторах с одинаковыми настройками диапазоны времени генерации перекрылись. В отчёт вошли замеры, анализ кадров и проверка вокала. [Замеры UMT5 и YuE2](benchmarks/2026-11-17-umt5-yue2-rx580.json)
+-
+-## Сборка GSQ-RCO
+-
+-Выберите **GSQ-RCO-Q2**, **GSQ-RCO-Q3** или **GSQ-RCO-Q4** и откройте JSON-манифест. Конвертер побайтно копирует упакованные тензоры из заранее оптимизированных GSQ-файлов по карте назначений RCO. Калибровка GSQ и поиск RCO выполняются отдельно. Портативный EXE собирает итоговый GGUF локально. [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO)
+-
+-```json
+-{
+-  "format": "gguf-gsq-rco-v1",
+-  "base": "model-base.gguf",
+-  "variants": {
+-    "q2": "model-gsq-q2.gguf",
+-    "q3": "model-gsq-q3.gguf"
+-  },
+-  "targets": {
+-    "2": {
+-      "tensors": {
+-        "blk.0.attn_q.weight": "q2",
+-        "blk.0.ffn_up.weight": "q3"
+-      }
+-    }
+-  }
+-}
+-```
+-
+-Пути задаются относительно манифеста. Добавьте нужные цели в targets. Значение каждого назначения указывает на файл из variants. Остальные тензоры берутся из базового файла. Необязательный max_tensor_bytes ограничивает общий размер всех тензоров. Конвертер выводит фактическое число бит на параметр.
+-
+-```powershell
+-Start-Process -FilePath '.\GGUF-Converter.exe' -ArgumentList '--cli "D:\Модели\Модель" -q Q4_0 -t 8' -Wait -PassThru
+-```
+-
+-Сборка из исходников требует Python 3.12+ на компьютере сборки. Команда проверяет SHA зависимостей и сохраняет EXE в `dist/`.
+-
+-```powershell
+-py -3.12 -I -B portable_build.py
+-```
+-
+-Для Vulkan-сборки передайте `--cxx`, `--glslc`, `--vulkan-include` и `--vulkan-import`. Для встроенной автозаписи укажите `--native-capture` с каталогом, собранным через `vulkan/build_capture.py`.
+-
+-[Лицензия](LICENSE.md) · [Исходники и лицензии компонентов](NOTICE.md).
++[Замеры](benchmarks/) · [Патчи](patches/) · [Лицензии и компоненты](NOTICE.md)
+diff --git a/convert.py b/convert.py
+index eb4383a..820924e 100644
+--- a/convert.py
++++ b/convert.py
+@@ -828,8 +828,7 @@ def gui(source=''):
+     output_value = tk.StringVar()
+     kind_value = tk.StringVar(value='Автоматически')
+     quantization_value = tk.StringVar(value='Q8')
+-    optimize_value = tk.BooleanVar(value=False)
+-    flip_value = tk.BooleanVar(value=False)
++    method_value = tk.StringVar(value='Выкл')
+     format_value = tk.StringVar()
+     hardware_value = tk.StringVar(value='Определение оборудования…')
+     advice_value = tk.StringVar()
+@@ -840,29 +839,39 @@ def gui(source=''):
+     job = None
+     closing = False
+ 
+-    def selection():
++    def selection(path):
+         value = quantization_value.get()
+-        if not optimize_value.get():
+-            return value
+-        item = USER_DIRECTORY / Path(input_value.get().strip().strip('"')).expanduser()
++        method=method_value.get()
+         try:
+-            if item.suffix.lower() == '.json' and json.loads(item.read_text(encoding='utf-8-sig')).get('format') == 'gguf-activation-calibration-v1':
+-                return 'ACTCAL-' + value
+-            if item.suffix.lower() == '.gguf':
+-                layout, tier = dominant_quantization(item)
+-                if layout and value == f'Q{tier}':
+-                    return 'ACTCAL-' + value
++            if path.suffix.lower()=='.json':
++                plan=json.loads(path.read_text(encoding='utf-8-sig'))
++                if plan.get('format')=='gguf-activation-calibration-v1':
++                    method='MACaQ-R' if plan.get('targets',{}).get(value[-1],{}).get('refiner')=='macaq-r' else 'ACTCAL'
++                else:
++                    method='GSQ/RCO'
++            elif method=='Авто':
++                tier=quantized_tier(path) if path.suffix.lower()=='.gguf' else None
++                method='ACTCAL' if value==f'Q{tier}' else 'GSQ/RCO'
+         except (OSError, ValueError, TypeError, KeyError, AttributeError):
+-            pass
+-        return 'GSQ-RCO-' + value
++            method='GSQ/RCO'
++        if method in ('ACTCAL','MACaQ-R'):
++            return 'ACTCAL-'+value, 'macaq-r' if method=='MACaQ-R' else 'actcal'
++        return ('GSQ-RCO-'+value if method=='GSQ/RCO' else value), 'actcal'
+ 
+     def refresh(*_):
+         nonlocal guessed
+-        resolved = output_quantization(selection())
+-        format_value.set(resolved)
+-        advice_value.set('')
+         value = input_value.get().strip().strip('"')
+         path = USER_DIRECTORY / Path(value).expanduser()
++        manifest=path.suffix.lower()=='.json'
++        if manifest:
++            method_value.set('Из манифеста')
++        elif method_value.get()=='Из манифеста':
++            method_value.set('Выкл')
++        method_box.configure(state='disabled' if manifest else 'readonly')
++        chosen,refiner=selection(path)
++        resolved = 'MACaQ-R-'+quantization_value.get() if refiner=='macaq-r' else output_quantization(chosen)
++        format_value.set(resolved)
++        advice_value.set('')
+         if not value or not path.exists():
+             kind_value.set('Автоматически')
+             return
+@@ -873,16 +882,16 @@ def gui(source=''):
+                 kind_value.set(route(path, 'auto')[2])
+             except (ValueError, OSError, KeyError, RuntimeError):
+                 kind_value.set('Требуется проверка файла')
+-        update_estimate(path)
++        update_estimate(path,chosen in CALIBRATIONS)
+         suggested = str(suggested_output(path, resolved))
+         if not output_value.get() or output_value.get() == guessed:
+             output_value.set(suggested)
+         guessed = suggested
+ 
+-    def update_estimate(path):
++    def update_estimate(path,calibrating):
+         try:
+             role = kind_value.get()
+-            if optimize_value.get():
++            if calibrating:
+                 tier = quantization_value.get()[-1]
+                 if path.suffix.lower() == '.json':
+                     plan = json.loads(path.read_text(encoding='utf-8-sig'))
+@@ -941,10 +950,8 @@ def gui(source=''):
+ 
+     def select_input(folder=False):
+         value = filedialog.askdirectory(initialdir=USER_DIRECTORY) if folder else filedialog.askopenfilename(initialdir=USER_DIRECTORY,
+-            filetypes=[('Модели и манифест GSQ-RCO', '*.gguf *.safetensors *.sft *.ckpt *.bin *.json'), ('Все файлы', '*.*')])
++            filetypes=[('Модели и манифесты', '*.gguf *.safetensors *.sft *.ckpt *.bin *.json'), ('Все файлы', '*.*')])
+         if value:
+-            if Path(value).suffix.lower() == '.json':
+-                optimize_value.set(True)
+             output_value.set('')
+             input_value.set(value)
+             refresh()
+@@ -962,12 +969,15 @@ def gui(source=''):
+         if not source:
+             messagebox.showerror('GGUF', 'Выберите файл или папку модели.')
+             return
+-        quantization = selection()
+-        if optimize_value.get():
++        original=(USER_DIRECTORY/Path(source).expanduser()).resolve()
++        quantization,refiner = selection(original)
++        output_format='MACaQ-R-'+quantization_value.get() if refiner=='macaq-r' else quantization
++        calibrating=quantization in CALIBRATIONS
++        if calibrating:
+             if Path(source).suffix.lower() != '.json' and (card is None or not card.gsq):
+                 messagebox.showerror('GSQ/RCO', 'Автокалибровке нужен поддерживаемый Vulkan GPU. Обычная конвертация доступна.')
+                 return
+-        automatic = optimize_value.get() and Path(source).suffix.lower() == '.gguf'
++        automatic = calibrating and original.suffix.lower()=='.gguf'
+         prompt = None
+         profile = None
+         reference = None
+@@ -975,13 +985,15 @@ def gui(source=''):
+             if 'AVX2' not in card.instructions:
+                 messagebox.showerror('GSQ/RCO', 'Встроенный сбор активаций использует AVX2. Для готовых активаций откройте манифест.')
+                 return
+-            original = (USER_DIRECTORY / Path(source).expanduser()).resolve()
+             try:
+                 preserve = quantized_tier(original) == int(quantization[-1])
+             except (OSError,ValueError,KeyError) as error:
+                 messagebox.showerror('GSQ/RCO',str(error))
+                 return
+-            if flip_value.get() and (quantization not in ACTIVATION_FORMATS or quantization in ('ACTCAL-Q2','ACTCAL-Q3')):
++            if quantization in ACTIVATION_FORMATS and not preserve:
++                messagebox.showerror('Калибровка','Для ACTCAL и MACaQ-R выберите текущий уровень кванта файла.')
++                return
++            if refiner=='macaq-r' and quantization in ('ACTCAL-Q2','ACTCAL-Q3'):
+                 messagebox.showerror('MACaQ-R','Выберите текущий формат Q4_0, Q8_0, Q4_K, Q5_K или Q6_K.')
+                 return
+             if preserve:
+@@ -1010,14 +1022,13 @@ def gui(source=''):
+                 if not path:
+                     return
+                 profile = Path(path).resolve(strict=True)
+-        elif optimize_value.get() and Path(source).suffix.lower() != '.json':
++        elif calibrating and original.suffix.lower() != '.json':
+             messagebox.showerror('GSQ/RCO', 'Для калибровки выберите GGUF или JSON-манифест.')
+             return
+         job = Conversion(lambda line: events.put(('log', line)),
+                          lambda label, done, total: events.put(('progress', (label, done, total))))
+         start_button.config(state='disabled')
+         cancel_button.config(state='normal')
+-        refiner='macaq-r' if flip_value.get() else 'actcal'
+ 
+         def work():
+             success = False
+@@ -1029,7 +1040,7 @@ def gui(source=''):
+                         payload = automatic_gsq_plan(original, int(quantization[-1]), prompt, profile, reference,
+                                                      activation=quantization in ACTIVATION_FORMATS,refiner=refiner)
+                         plan.write_text(json.dumps(payload, ensure_ascii=False), encoding='utf-8')
+-                        job.convert(plan, output or suggested_output(original, quantization), quantization=quantization)
++                        job.convert(plan, output or suggested_output(original, output_format), quantization=quantization)
+                 else:
+                     job.convert(source, output, quantization=quantization)
+                 success = True
+@@ -1111,14 +1122,10 @@ def gui(source=''):
+     format_box.grid(row=3, column=1, sticky='w', padx=4)
+     format_box.bind('<<ComboboxSelected>>', refresh)
+     ttk.Label(window, textvariable=format_value).grid(row=2, column=2, columnspan=2, sticky='w', padx=4)
+-    ttk.Checkbutton(window, text='Калибровка весов', variable=optimize_value, command=refresh).grid(row=3, column=2, sticky='w', padx=4)
+-
+-    def select_flip():
+-        if flip_value.get():
+-            optimize_value.set(True)
+-        refresh()
+-
+-    ttk.Checkbutton(window,text='MACaQ-R',variable=flip_value,command=select_flip).grid(row=3,column=3,sticky='w',padx=4)
++    ttk.Label(window,text='Калибровка').grid(row=3,column=2,sticky='e',padx=4)
++    method_box=ttk.Combobox(window,textvariable=method_value,values=('Выкл','Авто','ACTCAL','GSQ/RCO','MACaQ-R'),width=16,state='readonly')
++    method_box.grid(row=3,column=3,sticky='w',padx=4)
++    method_box.bind('<<ComboboxSelected>>',refresh)
+     ttk.Label(window, text='Оборудование').grid(row=4, column=0, sticky='w', padx=8)
+     ttk.Label(window, textvariable=hardware_value, wraplength=660).grid(row=4, column=1, columnspan=3, sticky='w', padx=4, pady=3)
+     ttk.Label(window, textvariable=advice_value, wraplength=660).grid(row=5, column=1, columnspan=3, sticky='w', padx=4, pady=3)
+@@ -1132,8 +1139,6 @@ def gui(source=''):
+     console = ScrolledText(window, wrap='word')
+     console.grid(row=9, column=0, columnspan=4, sticky='nsew', padx=8, pady=(0, 8))
+     window.protocol('WM_DELETE_WINDOW', close)
+-    if source and Path(source).suffix.lower() == '.json':
+-        optimize_value.set(True)
+     refresh()
+     threading.Thread(target=lambda: events.put(('hardware', hardware.detect(HARDWARE_HELPER))), daemon=True).start()
+     poll()
+diff --git a/docs/calibration.md b/docs/calibration.md
+new file mode 100644
+index 0000000..d87dac3
+--- /dev/null
++++ b/docs/calibration.md
+@@ -0,0 +1,84 @@
++# Calibration and build
++
++## GSQ/RCO on Vulkan
++
++Choose **GSQ/RCO** under Calibration and open a media GGUF or a `gguf-gsq-rco-vulkan-v1` manifest. The bundled calibration uses Vulkan shaders on a supported AMD Polaris GPU. The media worker needs AVX2 to record activations. A matching local KoboldCpp profile supplies companion weights automatically, including when the selected GGUF is its text encoder. Mixed-layout GSQ/RCO from a directly selected GGUF calibrates two recognized attention projections. A manifest can cover up to eight matrices and supports Q3 through the CLI. [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO)
++
++```json
++{
++  "format": "gguf-gsq-rco-vulkan-v1",
++  "base": "model.gguf",
++  "targets": {
++    "3": {
++      "max_tensor_bytes": 1000000000,
++      "tensors": {
++        "blk.0.attn_q.weight": "attention-input.npy",
++        "blk.0.ffn_up.weight": "mlp-input.npy"
++      }
++    }
++  }
++}
++```
++
++Paths are relative to the manifest. Use a NumPy `.npy` array of 2–32 activation rows for a matrix or `null` for capture. For automatic capture add `"capture": {"prompt": "…", "profile": "photo.kcpps"}`. A profile is optional for standalone diffusion models. Use `capture.base_part` to replace an encoder such as `sdclip1` and `capture.profile_root` to resolve relative paths in the profile. Enable `"model_loss": true` to rerank the feasible GSQ/RCO and rounding candidates by pixel MSE on a complete calibration render. The measured loss covers the complete output. GSQ still learns per-matrix weights, and RCO proposes a bounded set of configurations under an exact tensor-byte budget.
++
++Earlier local-batch calibration evidence is recorded by binary SHA. [v1.2.0 RX 580 measurements](../benchmarks/2026-11-16-rx580.json)
++
++The v1.3.0 RX 580 check covers automatic capture on ABDM and Wan, photo generation without upscaling, a 480p five-frame clip, and GGUF sizes for all four standard formats. [v1.3.0 results](../benchmarks/2026-11-16-v130-rx580.json)
++
++### Calibration with the original tensor layouts
++
++Enable weight calibration, select the existing tier and provide the matching GGUF or Safetensors checkpoint. ACTCAL uses activation-weighted least squares on Vulkan. For Q4_0 and Q8_0 it fits codes and scales. For Q2_K through Q6_K it fits superblock scales with the existing packed codes and subscales. Candidate rows are selected by projection error on a separate subset of the recorded activations. Tensor types, model metadata and payload size are preserved.
++
++CLI ACTCAL tiers are Q2, Q3, Q4, Q5, Q6 and Q8. Use `gguf-activation-calibration-v1` with `base`, `reference`, and `capture`. For a mixed Q4_K_M encoder, set `"4": {"all": true}` under `targets` to preserve each matrix's Q4_K or Q6_K type. For explicit selection, set `tensors` to names mapped to `.npy` files or `null`. Safetensors references support common floating formats, scaled INT8 and W4A8 INT4 with scales and codebooks. The earlier GSQ/RCO workflow has its own manifest.
++
++For YuE2, the converter detects the music GGUF and looks for a matching KoboldCpp music profile. A manifest can set `capture.base_part` to `musicllm` and provide `musicvae` in `capture.models`. `capture.prompt` is the musical style, and `capture.lyrics` optionally supplies training lyrics. The capture worker records Vulkan inputs to AR and NAR matrix products. Lookup tables and tensors unused by the calibration request keep their original bytes.
++
++When only a quantized GGUF is available, select its current tier, choose **ACTCAL** and select **No** in the reference checkpoint dialog. The CLI equivalent is `"reference": null`. The round trip expands weights to F32 in bounded chunks, runs the requantizer and checks activation projections. The original GGUF already has zero reconstruction error against those F32 values, so the published output retains its exact bytes.
++
++Choose **MACaQ-R** under Calibration to fit stored codes with fixed scales using a Vulkan adaptation of the greedy refinement. CLI manifests set `"refiner": "macaq-r"` inside the target. Supported layouts are Q4_0, Q8_0, Q4_K, Q5_K and Q6_K. The adaptation uses 32-column Hessian blocks and accepts rows on the held-out activation subset. These GGUFs use the existing inference kernels and activation precision. [MACaQ paper](https://arxiv.org/abs/2611.10649) · [MACaQ-R guide](https://github.com/huawei-csl/MACaQ/blob/3810efca0b9e819c8eb51addd93c3c87225b7476/llamacpp/README.md#macaq-r)
++
++The RX 580 trials covered 168 UMT5 projections and 395 YuE2 matrices. The stock and calibrated generation time ranges overlapped in the fixed-profile repetitions. The recorded visual and vocal content checks are included with the timings. [UMT5 and YuE2 measurements](../benchmarks/2026-11-17-umt5-yue2-rx580.json)
++
++## GSQ-RCO assembly
++
++Select **GSQ-RCO-Q2**, **GSQ-RCO-Q3** or **GSQ-RCO-Q4** and open a JSON manifest. The converter copies packed tensors from previously GSQ-optimized GGUF variants according to a per-tensor RCO assignment. Run GSQ calibration and the RCO search separately. The bundled EXE handles the assembly offline. [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO)
++
++```json
++{
++  "format": "gguf-gsq-rco-v1",
++  "base": "model-base.gguf",
++  "variants": {
++    "q2": "model-gsq-q2.gguf",
++    "q3": "model-gsq-q3.gguf"
++  },
++  "targets": {
++    "2": {
++      "tensors": {
++        "blk.0.attn_q.weight": "q2",
++        "blk.0.ffn_up.weight": "q3"
++      }
++    }
++  }
++}
++```
++
++Paths are relative to the manifest. Add one entry under each target you want to assemble. Each assignment value names a file in the variants map. Tensors outside the assignment come from the base file. The optional max_tensor_bytes applies to the total tensor payload, including tensors kept from the base. The converter prints the resulting bits per parameter.
++
++To run a conversion from PowerShell, pass `--cli` and wait for the process to exit.
++
++```powershell
++Start-Process -FilePath '.\GGUF-Converter.exe' -ArgumentList '--cli "D:\Models\My model" -q Q4_0 -t 8' -Wait -PassThru
++```
++
++For independent targets use `--gpu vulkan --cpu avx`, or `--gpu pascal --cpu avx2`. Use `-q Q4` for target-aware selection. An explicit `-q Q4_K` or `-q Q4_0` fixes the tensor format.
++
++To build from source, run the following on Windows with Python 3.12+ and the Windows .NET Framework C# compiler available. The build uses the pinned checksums in `dependencies.lock.json` and writes the EXE to `dist/`.
++
++```powershell
++py -3.12 -I -B portable_build.py
++```
++
++To include the Vulkan shaders and helper, pass all four options `--cxx`, `--glslc`, `--vulkan-include` and `--vulkan-import`. Point them to the MinGW-w64 `g++.exe`, Vulkan SDK `glslc.exe`, SDK include directory and `vulkan-1.lib`. Pass `--native-capture` with the directory produced by `vulkan/build_capture.py` to enable the embedded media worker. [Corresponding source and notices](../NOTICE.md)
++
++[License](../LICENSE.md) · [Corresponding sources and component notices](../NOTICE.md).

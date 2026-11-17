@@ -1,0 +1,22 @@
+{
+  "sha256": "ab7960c75a0f5d889f88e15288ac923ec03f6888bab031d4d16722c6bd963500",
+  "bytes": 233480192,
+  "gui": true,
+  "selection_cases": [
+    {
+      "cli": "GSQ-RCO-Q8",
+      "format": "gguf-gsq-rco-vulkan-v1",
+      "reference": "external",
+      "refiner": null,
+      "output": "source-GSQ-RCO-Q8.gguf"
+    },
+    {
+      "cli": "ACTCAL-Q8",
+      "format": "gguf-activation-calibration-v1",
+      "reference": null,
+      "refiner": "macaq-r",
+      "output": "source-MACaQ-R-Q8.gguf"
+    }
+  ],
+  "calibration_sources_and_shaders_match_v180": true
+}
