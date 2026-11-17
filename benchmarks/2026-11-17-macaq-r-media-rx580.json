@@ -1,0 +1,808 @@
+{
+  "date": "2026-11-17",
+  "hardware": "RX 580 2048SP 8 GiB and Xeon E5-2696 v3",
+  "converter": {
+    "sha256": "f7e162577ce50193398a16a9e88f99a9f1087782a429971277011a9927bb5216",
+    "bytes": 233480192,
+    "gui": true,
+    "checks": {
+      "Q4_1": {
+        "macaq-r": {
+          "bytes": 2080,
+          "sha256": "57683a190d05a5e5dc12c6143d36ba5eaf997e61d43e64a895a79ab5bb15a292",
+          "matches_expected_codes": true,
+          "source_hash_preserved": false
+        }
+      }
+    },
+    "shaders_match_v181": true
+  },
+  "selector_v181": {
+    "sha256": "ab7960c75a0f5d889f88e15288ac923ec03f6888bab031d4d16722c6bd963500",
+    "bytes": 233480192,
+    "gui": true,
+    "selection_cases": [
+      {
+        "cli": "GSQ-RCO-Q8",
+        "format": "gguf-gsq-rco-vulkan-v1",
+        "reference": "external",
+        "refiner": null,
+        "output": "source-GSQ-RCO-Q8.gguf"
+      },
+      {
+        "cli": "ACTCAL-Q8",
+        "format": "gguf-activation-calibration-v1",
+        "reference": null,
+        "refiner": "macaq-r",
+        "output": "source-MACaQ-R-Q8.gguf"
+      }
+    ],
+    "calibration_sources_and_shaders_match_v180": true
+  },
+  "formats_v180": {
+    "sha256": "4fde879fa2634ed002a2c9bdb3fcb5de8a9f73854008f1cdfcb96ca356e19908",
+    "bytes": 233480192,
+    "checks": {
+      "Q4_0": {
+        "actcal": {
+          "bytes": 1888,
+          "sha256": "5ebd9e122ce6079dc2efc78f14580b706cf66acadef47abd55620de9733c0669",
+          "matches_expected_codes": true,
+          "source_hash_preserved": true
+        },
+        "macaq-r": {
+          "bytes": 1888,
+          "sha256": "4c9574a92803bc2804725b0c800449df1bfcda6439aad6090d49285b65ea6818",
+          "matches_expected_codes": true,
+          "source_hash_preserved": false
+        }
+      },
+      "Q8_0": {
+        "actcal": {
+          "bytes": 3424,
+          "sha256": "7d5327c11fdd12a1bc906ca31c8b4145971110f7acdacb46f505ddcf75eaec92",
+          "matches_expected_codes": true,
+          "source_hash_preserved": true
+        },
+        "macaq-r": {
+          "bytes": 3424,
+          "sha256": "d23cb54ec4173d8b3a30dd20fa543d33f05749f5894015dba907f128b92193b2",
+          "matches_expected_codes": true,
+          "source_hash_preserved": false
+        }
+      },
+      "Q4_K": {
+        "actcal": {
+          "bytes": 1888,
+          "sha256": "e204ae27712660c313803937e2e5bdf228aebfe7e49c6144edecb5247b92e197",
+          "matches_expected_codes": true,
+          "source_hash_preserved": true
+        },
+        "macaq-r": {
+          "bytes": 1888,
+          "sha256": "9c7d8ce88e935d2943bf66aa5125aaf7a2e41ef5198927db124156ff6549acdc",
+          "matches_expected_codes": true,
+          "source_hash_preserved": false
+        }
+      },
+      "Q5_K": {
+        "actcal": {
+          "bytes": 2272,
+          "sha256": "6ed30abeb7e64e6210a8281ab5b5c481a6972021a1e06613d37d3355595d991b",
+          "matches_expected_codes": true,
+          "source_hash_preserved": true
+        },
+        "macaq-r": {
+          "bytes": 2272,
+          "sha256": "8c4fbb1ba3d02beb739d13f98e327a2a6c197b2d9f7c441b5739ddf9dea177e9",
+          "matches_expected_codes": true,
+          "source_hash_preserved": false
+        }
+      },
+      "Q6_K": {
+        "actcal": {
+          "bytes": 2688,
+          "sha256": "430b4a489ad863432a97406c28fa719e9acdc7376f0bad4d360419fce43db212",
+          "matches_expected_codes": true,
+          "source_hash_preserved": true
+        },
+        "macaq-r": {
+          "bytes": 2688,
+          "sha256": "3b8aa3be54dd5e5d818dbb2cb6a35aee6e01539da092d5e94587b8f30ca87ce8",
+          "matches_expected_codes": true,
+          "source_hash_preserved": false
+        }
+      }
+    }
+  },
+  "methods_comparison": {
+    "abdm": {
+      "tensor": "model.diffusion_model.final_linear_video.weight",
+      "layout": "Q8_0",
+      "width": 3072,
+      "output_rows": 12,
+      "calibration_rows": 24,
+      "unused_eval_rows": 8,
+      "steps": 2,
+      "runs": {
+        "stock": {
+          "projection_mse": 4.597021810261633e-06
+        },
+        "actcal": {
+          "calibration_seconds": 0.3293062000302598,
+          "projection_mse": 4.4441847489584685e-06
+        },
+        "gsq": {
+          "calibration_seconds": 0.3156584999524057,
+          "projection_mse": 6.77364177511149e-06
+        },
+        "macaq-r": {
+          "calibration_seconds": 0.14778690005186945,
+          "projection_mse": 5.156014010326837e-06
+        }
+      }
+    },
+    "wan": {
+      "tensor": "blocks.0.cross_attn.k.weight",
+      "layout": "Q4_0",
+      "width": 3072,
+      "output_rows": 12,
+      "calibration_rows": 24,
+      "unused_eval_rows": 8,
+      "steps": 2,
+      "runs": {
+        "stock": {
+          "projection_mse": 8.545280192941615e-09
+        },
+        "actcal": {
+          "calibration_seconds": 0.15669639990665019,
+          "projection_mse": 3.8020968977370284e-09
+        },
+        "gsq": {
+          "calibration_seconds": 0.15455020009540021,
+          "projection_mse": 4.13763931840852e-09
+        },
+        "macaq-r": {
+          "calibration_seconds": 0.14044889993965626,
+          "projection_mse": 5.123094816717373e-09
+        }
+      }
+    },
+    "umt5": {
+      "tensor": "enc.blk.0.attn_k.weight",
+      "layout": "Q4_K",
+      "width": 4096,
+      "output_rows": 12,
+      "calibration_rows": 24,
+      "unused_eval_rows": 8,
+      "steps": 2,
+      "runs": {
+        "stock": {
+          "projection_mse": 0.000574391192155114
+        },
+        "actcal": {
+          "calibration_seconds": 0.1815293999388814,
+          "projection_mse": 0.0001106961630104782
+        },
+        "gsq": {
+          "calibration_seconds": 0.16272260004188865,
+          "projection_mse": 0.00023981009047702173
+        },
+        "macaq-r": {
+          "calibration_seconds": 0.13817539997398853,
+          "projection_mse": 0.0003711852772691297
+        }
+      }
+    },
+    "yue2": {
+      "tensor": "model_weights/llm2vae.weight",
+      "layout": "Q8_0",
+      "width": 2048,
+      "output_rows": 12,
+      "calibration_rows": 24,
+      "unused_eval_rows": 8,
+      "steps": 2,
+      "runs": {
+        "stock": {
+          "projection_mse": 1.344975017236738e-05
+        },
+        "actcal": {
+          "calibration_seconds": 0.394817000022158,
+          "projection_mse": 7.265927971338015e-06
+        },
+        "gsq": {
+          "calibration_seconds": 0.14651750004850328,
+          "projection_mse": 5.5319488994181225e-06
+        },
+        "macaq-r": {
+          "calibration_seconds": 0.3248652000911534,
+          "projection_mse": 4.187263675274148e-06
+        }
+      }
+    },
+    "dit": {
+      "tensor": "dit.post_conv.weight",
+      "layout": "Q8_0",
+      "width": 256,
+      "output_rows": 12,
+      "calibration_rows": 24,
+      "unused_eval_rows": 8,
+      "steps": 2,
+      "runs": {
+        "stock": {
+          "projection_mse": 8.124562629419074e-05
+        },
+        "actcal": {
+          "calibration_seconds": 0.13712120009586215,
+          "projection_mse": 8.768278014877524e-05
+        },
+        "gsq": {
+          "calibration_seconds": 0.1168210000032559,
+          "projection_mse": 8.124562629419074e-05
+        },
+        "macaq-r": {
+          "calibration_seconds": 0.13300290005281568,
+          "projection_mse": 9.321877620986167e-05
+        }
+      }
+    },
+    "same": {
+      "tensor": "ae.dec.mapping.w0",
+      "layout": "Q8_0",
+      "width": 768,
+      "output_rows": 12,
+      "calibration_rows": 24,
+      "unused_eval_rows": 8,
+      "steps": 2,
+      "runs": {
+        "stock": {
+          "projection_mse": 2.559713876412488e-09
+        },
+        "actcal": {
+          "calibration_seconds": 0.1376476000295952,
+          "projection_mse": 2.166909029725369e-09
+        },
+        "gsq": {
+          "calibration_seconds": 0.12702419993001968,
+          "projection_mse": 1.872374638345649e-09
+        },
+        "macaq-r": {
+          "calibration_seconds": 0.12759349995758384,
+          "projection_mse": 1.1484440454581238e-09
+        }
+      }
+    }
+  },
+  "moss_self_f32": {
+    "source_sha256": "f3083eab75745e7d3e0cfc8184747d5e53ae4a23811096345d0e2b361c571bde",
+    "reference_sha256": null,
+    "eligible": 248,
+    "observed": 248,
+    "changed": 0,
+    "refiner": "actcal",
+    "unobserved": [],
+    "reference_mode": "self_f32",
+    "original_bytes_preserved": true,
+    "calibration_seconds": 1312.0039335999754,
+    "candidate_sha256": "f3083eab75745e7d3e0cfc8184747d5e53ae4a23811096345d0e2b361c571bde",
+    "bytes": 10400747200,
+    "types": {
+      "Q8_0": 334,
+      "F32": 426
+    },
+    "projection_before": 0.0,
+    "projection_after": 0.0,
+    "requantized_projection_error": 0.0
+  },
+  "moss_capture": {
+    "captured": 248,
+    "eligible": 334,
+    "source_sha256": "f3083eab75745e7d3e0cfc8184747d5e53ae4a23811096345d0e2b361c571bde",
+    "weight_bytes": 7350910976,
+    "eligible_bytes": 9852246912,
+    "worker_sha256": "dd70323985387ed562aa1d2179c6b332cd4612e2dc5f93efd20e7713b17b89b9"
+  },
+  "photo_source": {
+    "version": "MOSS Refined Realism v3.0 8step BF16",
+    "url": "https://civitai.red/models/3013588?modelVersionId=3457856",
+    "file_id": 3359265,
+    "sha256": "229c5644a680aa025a2a17551215008c64d728f3c04459787842e5e504b59bd0"
+  },
+  "macaq_r": {
+    "abdm": {
+      "source_sha256": "92e2a40e6752c83da3526ec6f2da1653bed433cabde48627792a568eac0f008f",
+      "reference_sha256": "229c5644a680aa025a2a17551215008c64d728f3c04459787842e5e504b59bd0",
+      "steps": 2,
+      "eligible": 185,
+      "observed": 185,
+      "changed": 185,
+      "refiner": "macaq-r",
+      "unobserved": [],
+      "calibration_seconds": 2144.621938199969,
+      "bytes": 5401115648,
+      "candidate_sha256": "48c4f0259b28e0f6fd5178da6c6b63c4b731ee46d899bdd416069b297a3a8cb1",
+      "projection_before": 9209.077727813823,
+      "projection_after": 4698.200728957855,
+      "tensor_types": {
+        "Q8_0": 185,
+        "F32": 193
+      }
+    },
+    "wan": {
+      "source_sha256": "8aa3a98c254bd02a9cc7e4f1db37720fe291cef8b0c32fb78e7a2391125d6b28",
+      "reference_sha256": "fa70f4f760bd97ed435e2a8206f0b459192d9955cd60414e2815ed0c5d147f16",
+      "steps": 2,
+      "eligible": 300,
+      "observed": 300,
+      "changed": 300,
+      "refiner": "macaq-r",
+      "unobserved": [],
+      "calibration_seconds": 2247.876311799977,
+      "bytes": 3033897696,
+      "candidate_sha256": "4cb93114fbc76aff703c7a5374996931b22bc24b697a0e2825e17d3b594198d4",
+      "projection_before": 30059.208225893377,
+      "projection_after": 12501.371059833169,
+      "tensor_types": {
+        "F32": 519,
+        "F16": 6,
+        "Q4_0": 270,
+        "Q4_1": 30
+      },
+      "refined_layouts": {
+        "Q4_0": 270,
+        "Q4_1": 30
+      }
+    },
+    "umt5": {
+      "source_sha256": "17cf97a5bbbc60a646d6105b832b6f657ce904a8a1ad970e4b59df0c67584a40",
+      "reference_sha256": "fa1d36fd54f171ae60fea915c23bd77986b330bbed9729f0d2f8ecbe9168bc48",
+      "steps": 2,
+      "eligible": 168,
+      "observed": 168,
+      "changed": 168,
+      "refiner": "macaq-r",
+      "unobserved": [],
+      "calibration_seconds": 1816.4141516999807,
+      "bytes": 3655145312,
+      "candidate_sha256": "ffcd25face7a0732fdfb832bdf1f396fc3c1dddcac149d242ff7090bd0beb221",
+      "projection_before": 60642.60155027461,
+      "projection_after": 1137.2626045586635,
+      "tensor_types": {
+        "Q4_K": 144,
+        "F32": 73,
+        "Q6_K": 25
+      }
+    },
+    "yue2": {
+      "source_sha256": "52be345b5155bf9ef0b2411e7df8d1d2b8e13b6d977a2f70c35612ec69b1f591",
+      "reference_sha256": "4cf3fdffbaaed2d8e30a3122ac7cd27d0c96f8921805f173da9758c685b3c7d6",
+      "steps": 2,
+      "eligible": 395,
+      "observed": 395,
+      "changed": 395,
+      "refiner": "macaq-r",
+      "unobserved": [],
+      "calibration_seconds": 1130.4727409000043,
+      "bytes": 4264195616,
+      "candidate_sha256": "af0ef18b9251d44dcba63afa737917ab36d977040d6b314fd37928b7ff9cfeb7",
+      "projection_before": 231.56310235258462,
+      "projection_after": 149.93603742288767,
+      "tensor_types": {
+        "F16": 6,
+        "BF16": 227,
+        "Q8_0": 395
+      }
+    },
+    "dit": {
+      "source_sha256": "cceae541b7241d0fd67b1d0bae036e03d0cd8cbdd7a485db7d5505ddc118943a",
+      "reference_sha256": "5927385381d7d675839f27923705bb536638d45c95e344309136d88a93b30436",
+      "steps": 2,
+      "eligible": 172,
+      "observed": 172,
+      "changed": 172,
+      "refiner": "macaq-r",
+      "unobserved": [],
+      "calibration_seconds": 169.6079144999967,
+      "bytes": 494224064,
+      "candidate_sha256": "cd5ad56f38763ecd020743281e5f0f5e10c302c9b16a15269c04612b24afd02a",
+      "projection_before": 9307.077858546563,
+      "projection_after": 6002.12775713873,
+      "tensor_types": {
+        "Q8_0": 172,
+        "F32": 245,
+        "F16": 20
+      }
+    },
+    "same": {
+      "source_sha256": "d1b4e26213df03032eabd72668cd33d06deb5d93cfaa19d1d6d3fba3bcb7adc8",
+      "reference_sha256": "e1854b7045a059f355639e0b92dd52a5f8701becb4a8a599035adb43124f4c89",
+      "steps": 2,
+      "eligible": 54,
+      "observed": 54,
+      "changed": 53,
+      "refiner": "macaq-r",
+      "unobserved": [],
+      "calibration_seconds": 33.01411410002038,
+      "bytes": 115345696,
+      "candidate_sha256": "970d7961d5f1ad33ca696017c18ecc2c6c471ffc0d358b3a6c3e943877e0e2bb",
+      "projection_before": 8.770883088102584,
+      "projection_after": 1.2538967783299142,
+      "tensor_types": {
+        "Q8_0": 54,
+        "F32": 189
+      }
+    }
+  },
+  "sa3_actcal": {
+    "dit": {
+      "source_sha256": "cceae541b7241d0fd67b1d0bae036e03d0cd8cbdd7a485db7d5505ddc118943a",
+      "reference_sha256": "5927385381d7d675839f27923705bb536638d45c95e344309136d88a93b30436",
+      "eligible": 172,
+      "observed": 172,
+      "changed": 172,
+      "unobserved": [],
+      "calibration_seconds": 90.70955640001921,
+      "candidate_sha256": "c81d68e624ba2f1cc9ff19ff6f3868a213c7aa2ce255467e24a0849c5f3bdb7a",
+      "bytes": 494224064,
+      "types": {
+        "Q8_0": 172,
+        "F32": 245,
+        "F16": 20
+      },
+      "projection_before": 9307.077858546563,
+      "projection_after": 4240.593494694469
+    },
+    "same": {
+      "source_sha256": "d1b4e26213df03032eabd72668cd33d06deb5d93cfaa19d1d6d3fba3bcb7adc8",
+      "reference_sha256": "e1854b7045a059f355639e0b92dd52a5f8701becb4a8a599035adb43124f4c89",
+      "eligible": 54,
+      "observed": 54,
+      "changed": 53,
+      "unobserved": [],
+      "calibration_seconds": 21.0507682999596,
+      "candidate_sha256": "46961d6a42850824f765863ddb762f4a56de3b0ee9640ccb53181378647f7ceb",
+      "bytes": 115345696,
+      "types": {
+        "Q8_0": 54,
+        "F32": 189
+      },
+      "projection_before": 8.770883088102584,
+      "projection_after": 2.0973119590862312
+    }
+  },
+  "renders": {
+    "photo": {
+      "profile_sha256": "843293d4413b02e0f4585c7dc46d3857c6289abc26b2de9e95d7946416c928fd",
+      "native_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "weights": {
+        "abdm": {
+          "stock": "92e2a40e6752c83da3526ec6f2da1653bed433cabde48627792a568eac0f008f",
+          "calibrated": "48c4f0259b28e0f6fd5178da6c6b63c4b731ee46d899bdd416069b297a3a8cb1"
+        }
+      },
+      "runs": [
+        {
+          "arm": "stock",
+          "seconds": 138.01599999994505,
+          "native_seconds": 123.564,
+          "size": [
+            736,
+            1104
+          ],
+          "raw_sha256": "b83fb8a4c3c2e944d15f63e9a1d8fb59f2fe22c86f9a26090dd69552aa0cd211",
+          "final_sha256": "c17d925074e6f22ac9e9f1c6c7b354b777524cbbed95cfb6ec811d8a31942dc2"
+        },
+        {
+          "arm": "calibrated",
+          "seconds": 134.25,
+          "native_seconds": 123.554,
+          "size": [
+            736,
+            1104
+          ],
+          "raw_sha256": "a6039cd4956af190f149574e062197b6017380f9982d6cd5b631ffdf94466636",
+          "final_sha256": "c27ae70314d0fb9828d48e3f3899e993be3af46637b1ee67300584a03c930c26",
+          "quality": {
+            "raw": {
+              "psnr_db": 35.029129585608885,
+              "pixels_equal": false,
+              "ssim": 0.9870322942733765
+            },
+            "final": {
+              "psnr_db": 34.86592321017979,
+              "pixels_equal": false
+            }
+          }
+        }
+      ]
+    },
+    "video": {
+      "profile_sha256": "bf15115402c68882d29b308c6c92b02e4efdf95265731d9368bb2c7beeadb2f8",
+      "native_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "weights": {
+        "wan": {
+          "stock": "8aa3a98c254bd02a9cc7e4f1db37720fe291cef8b0c32fb78e7a2391125d6b28",
+          "calibrated": "4cb93114fbc76aff703c7a5374996931b22bc24b697a0e2825e17d3b594198d4"
+        },
+        "umt5": {
+          "stock": "17cf97a5bbbc60a646d6105b832b6f657ce904a8a1ad970e4b59df0c67584a40",
+          "calibrated": "ffcd25face7a0732fdfb832bdf1f396fc3c1dddcac149d242ff7090bd0beb221"
+        }
+      },
+      "runs": [
+        {
+          "arm": "stock",
+          "seconds": 98.39099999994505,
+          "encode_seconds": 0.7765867999987677,
+          "avi": {
+            "microseconds_per_frame": 41666,
+            "frames": 5,
+            "width": 832,
+            "height": 480,
+            "codec": "MJPG",
+            "scale": 1,
+            "rate": 24,
+            "fps": 24.0
+          },
+          "avi_sha256": "22f0832dadb39fe53f75ab9ec904590396588f32e4d67eceaeedad7e5293c4e3"
+        },
+        {
+          "arm": "calibrated",
+          "seconds": 96.59400000004098,
+          "encode_seconds": 0.10683209996204823,
+          "avi": {
+            "microseconds_per_frame": 41666,
+            "frames": 5,
+            "width": 832,
+            "height": 480,
+            "codec": "MJPG",
+            "scale": 1,
+            "rate": 24,
+            "fps": 24.0
+          },
+          "avi_sha256": "92444d6f16d9dbc534225ef13ea80bcaf74c7ea7c615fd92d4de175f237396e9",
+          "quality": [
+            {
+              "psnr_db": 22.586209994158445,
+              "pixels_equal": false,
+              "ssim": 0.600947380065918
+            },
+            {
+              "psnr_db": 23.192571486807058,
+              "pixels_equal": false,
+              "ssim": 0.5790303945541382
+            },
+            {
+              "psnr_db": 24.160328127826865,
+              "pixels_equal": false,
+              "ssim": 0.607270359992981
+            },
+            {
+              "psnr_db": 25.228151638319524,
+              "pixels_equal": false,
+              "ssim": 0.6319107413291931
+            },
+            {
+              "psnr_db": 26.506495775447547,
+              "pixels_equal": false,
+              "ssim": 0.8013242483139038
+            }
+          ]
+        }
+      ]
+    },
+    "yue2": {
+      "profile_sha256": "89b27cb9fcf0783ace14ef3004a8558f04f68ec643aa52e2d65eaa8aba5ec33e",
+      "native_sha256": "e823acf0221ec199fe64b0801e56e8b2062c9d0572874d0a9df1dfeb9f05f97b",
+      "weights": {
+        "yue2": {
+          "stock": "52be345b5155bf9ef0b2411e7df8d1d2b8e13b6d977a2f70c35612ec69b1f591",
+          "calibrated": "af0ef18b9251d44dcba63afa737917ab36d977040d6b314fd37928b7ff9cfeb7"
+        }
+      },
+      "runs": [
+        {
+          "arm": "stock",
+          "seconds": 48.49770750000607,
+          "mp3_sha256": "791fd3eecfbf401a80d7e93a470f9886ebada5ae470b76bdcf8be2d028274645",
+          "pcm_sha256": "bdb700d1064431d66d60883a9485aac65864463e0f04e9282750a453758d8309",
+          "duration_seconds": 24.0,
+          "rms": 0.13153651356697083,
+          "peak": 0.9521484375,
+          "clipped_fraction": 0.0,
+          "quiet_window_fraction": 0.0033333333333333335
+        },
+        {
+          "arm": "calibrated",
+          "seconds": 31.323522299993783,
+          "mp3_sha256": "eddfed87cc001408766d144b57433cc8177d0876d49950c80f32df280669a30f",
+          "pcm_sha256": "82c233a14af24ca1722f974be2790a4caf8955ef3bfad13f1fd59eb46b1f4e9b",
+          "duration_seconds": 24.0,
+          "rms": 0.12118290364742279,
+          "peak": 0.724822998046875,
+          "clipped_fraction": 0.0,
+          "quiet_window_fraction": 0.023333333333333334
+        },
+        {
+          "arm": "calibrated",
+          "seconds": 31.389690099982545,
+          "mp3_sha256": "eddfed87cc001408766d144b57433cc8177d0876d49950c80f32df280669a30f",
+          "pcm_sha256": "82c233a14af24ca1722f974be2790a4caf8955ef3bfad13f1fd59eb46b1f4e9b",
+          "duration_seconds": 24.0,
+          "rms": 0.12118290364742279,
+          "peak": 0.724822998046875,
+          "clipped_fraction": 0.0,
+          "quiet_window_fraction": 0.023333333333333334
+        },
+        {
+          "arm": "stock",
+          "seconds": 31.385581100010313,
+          "mp3_sha256": "791fd3eecfbf401a80d7e93a470f9886ebada5ae470b76bdcf8be2d028274645",
+          "pcm_sha256": "bdb700d1064431d66d60883a9485aac65864463e0f04e9282750a453758d8309",
+          "duration_seconds": 24.0,
+          "rms": 0.13153651356697083,
+          "peak": 0.9521484375,
+          "clipped_fraction": 0.0,
+          "quiet_window_fraction": 0.0033333333333333335
+        }
+      ]
+    },
+    "sa3": {
+      "backend": "SA3 CPU",
+      "runtime_sha256": "d16dd48e84c405192fa56a87d16d8697bd72bc142aa91727c9469e7ed752f7eb",
+      "runs": [
+        {
+          "seconds": 8.701289199991152,
+          "duration_seconds": 2.5,
+          "pcm_sha256": "f37d5d91fc1c8bbf06910bc0f76909acc628496e117575357464f94068e679ac",
+          "rms": 0.13057874143123627,
+          "peak": 0.9635028839111328,
+          "arm": "stock"
+        },
+        {
+          "seconds": 7.7249462000327185,
+          "duration_seconds": 2.5,
+          "pcm_sha256": "b2c7148af3aac43441c0797c86cf31a0710d33bc5b5f3664b2dc667f22b33378",
+          "rms": 0.12404397875070572,
+          "peak": 0.9634414911270142,
+          "arm": "calibrated"
+        },
+        {
+          "seconds": 7.8820953000104055,
+          "duration_seconds": 2.5,
+          "pcm_sha256": "b2c7148af3aac43441c0797c86cf31a0710d33bc5b5f3664b2dc667f22b33378",
+          "rms": 0.12404397875070572,
+          "peak": 0.9634414911270142,
+          "arm": "calibrated"
+        },
+        {
+          "seconds": 7.694020600058138,
+          "duration_seconds": 2.5,
+          "pcm_sha256": "f37d5d91fc1c8bbf06910bc0f76909acc628496e117575357464f94068e679ac",
+          "rms": 0.13057874143123627,
+          "peak": 0.9635028839111328,
+          "arm": "stock"
+        }
+      ],
+      "weights": {
+        "stable-audio-3-small-sfx-dit-0.5B-v1.0-Q8_0.gguf": {
+          "stock": "cceae541b7241d0fd67b1d0bae036e03d0cd8cbdd7a485db7d5505ddc118943a",
+          "calibrated": "cd5ad56f38763ecd020743281e5f0f5e10c302c9b16a15269c04612b24afd02a"
+        },
+        "stable-audio-3-small-sfx-same-s-v1.0-Q8_0.gguf": {
+          "stock": "d1b4e26213df03032eabd72668cd33d06deb5d93cfaa19d1d6d3fba3bcb7adc8",
+          "calibrated": "970d7961d5f1ad33ca696017c18ecc2c6c471ffc0d358b3a6c3e943877e0e2bb"
+        }
+      },
+      "median_seconds": {
+        "stock": 8.197654900024645,
+        "calibrated": 7.803520750021562
+      }
+    },
+    "sa3-actcal": {
+      "backend": "SA3 CPU",
+      "runtime_sha256": "d16dd48e84c405192fa56a87d16d8697bd72bc142aa91727c9469e7ed752f7eb",
+      "runs": [
+        {
+          "seconds": 8.649583399994299,
+          "duration_seconds": 2.5,
+          "pcm_sha256": "f37d5d91fc1c8bbf06910bc0f76909acc628496e117575357464f94068e679ac",
+          "rms": 0.13057874143123627,
+          "peak": 0.9635028839111328,
+          "arm": "stock"
+        },
+        {
+          "seconds": 7.752645899890922,
+          "duration_seconds": 2.5,
+          "pcm_sha256": "a711778500af0213c3f1487184662c4123894635f76858de23be45ab890d4077",
+          "rms": 0.12589974701404572,
+          "peak": 0.9634436368942261,
+          "arm": "calibrated"
+        },
+        {
+          "seconds": 7.759225700050592,
+          "duration_seconds": 2.5,
+          "pcm_sha256": "a711778500af0213c3f1487184662c4123894635f76858de23be45ab890d4077",
+          "rms": 0.12589974701404572,
+          "peak": 0.9634436368942261,
+          "arm": "calibrated"
+        },
+        {
+          "seconds": 7.829090300016105,
+          "duration_seconds": 2.5,
+          "pcm_sha256": "f37d5d91fc1c8bbf06910bc0f76909acc628496e117575357464f94068e679ac",
+          "rms": 0.13057874143123627,
+          "peak": 0.9635028839111328,
+          "arm": "stock"
+        }
+      ],
+      "weights": {
+        "stable-audio-3-small-sfx-dit-0.5B-v1.0-Q8_0.gguf": {
+          "stock": "cceae541b7241d0fd67b1d0bae036e03d0cd8cbdd7a485db7d5505ddc118943a",
+          "calibrated": "c81d68e624ba2f1cc9ff19ff6f3868a213c7aa2ce255467e24a0849c5f3bdb7a"
+        },
+        "stable-audio-3-small-sfx-same-s-v1.0-Q8_0.gguf": {
+          "stock": "d1b4e26213df03032eabd72668cd33d06deb5d93cfaa19d1d6d3fba3bcb7adc8",
+          "calibrated": "46961d6a42850824f765863ddb762f4a56de3b0ee9640ccb53181378647f7ceb"
+        }
+      },
+      "median_seconds": {
+        "stock": 8.239336850005202,
+        "calibrated": 7.755935799970757
+      }
+    }
+  },
+  "review": {
+    "photo": {
+      "visual_review": "Both renders kept the requested nonsexual adult figure study, subject, pose and composition. Fine shading and grain differed slightly.",
+      "scope": "One fixed-seed pair at the standard profile without upscaling. SSIM uses the raw render.",
+      "adopted": false,
+      "decision": "Native rendering time was effectively equal. The images were closely aligned and the pair does not establish a visual-quality improvement."
+    },
+    "video": {
+      "visual_review": "Both versions rendered the requested charcoal figure study. The refined version changed the sitter's pose and framing on the inspected first frame.",
+      "scope": "One fixed-seed 832x480 five-frame clip per version. Both Wan and UMT5 weights changed between arms. Frame metrics compare the candidate against stock.",
+      "adopted": false,
+      "decision": "The candidate altered the composition. A single pair does not establish a generation speed or visual-quality improvement."
+    },
+    "yue2": {
+      "audio_review": "Both versions generated 24 seconds without clipping. The same two test words were recognized in both versions. Each version reproduced its own decoded PCM across repetitions.",
+      "scope": "Two requests per version, ordered stock, candidate, candidate, stock. The initial stock request was slower. In reversed order the two requests both took 31.39 seconds when rounded to hundredths.",
+      "adopted": false,
+      "decision": "The observed timings overlap, and the audio and transcription checks establish basic output behavior. Audio preference was not measured."
+    },
+    "sa3": {
+      "audio_review": "All arms produced finite, non-silent 2.5-second output with peaks below full scale. Decoded PCM reproduced across runs of the same arm and differed between stock, ACTCAL and MACaQ-R.",
+      "scope": "One fixed-seed sound-effect prompt on CPU, with two requests per arm within each method comparison. Both DiT and SAME-S weights changed together.",
+      "adopted": false,
+      "decision": "The final stock request took approximately as long as the candidates. Signal checks do not establish an audio-quality preference."
+    }
+  },
+  "earlier_renders": {
+    "fixed_layout_actcal_photo_and_wan": "2026-11-16-v160-rx580.json",
+    "fixed_layout_actcal_umt5_and_yue2": "2026-11-17-umt5-yue2-rx580.json",
+    "two_matrix_gsq_rco_photo_wan_moss": "2026-11-16-rx580.json"
+  },
+  "yue2_transcript_checks": {
+    "whisper_sha256": "c77c5766f1cef09b6b7d47f21b546cbddd4157886b3b5d6d4f709e91e66c7c2b",
+    "runs": [
+      {
+        "arm": "stock",
+        "song_sha256": "791fd3eecfbf401a80d7e93a470f9886ebada5ae470b76bdcf8be2d028274645",
+        "recognized_terms": [
+          "damn",
+          "fuck"
+        ]
+      },
+      {
+        "arm": "calibrated",
+        "song_sha256": "eddfed87cc001408766d144b57433cc8177d0876d49950c80f32df280669a30f",
+        "recognized_terms": [
+          "damn",
+          "fuck"
+        ]
+      }
+    ]
+  },
+  "method": "Block-local MACaQ-R greedy code refinement with fixed scales and 32-column Hessians. Projection statistics use recorded activation rows. Native inference kernels and activation precision are preserved."
+}

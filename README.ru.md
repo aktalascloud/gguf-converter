@@ -20,4 +20,4 @@
 
 Встроенная адаптация MACaQ-R использует гессиан блоками по 32 столбца и штатные ядра генерации GGUF. [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO) · [MACaQ](https://github.com/huawei-csl/MACaQ)
 
-[Замеры](benchmarks/) · [Патчи](patches/) · [Лицензии и компоненты](NOTICE.md)
+[Сравнение на RX 580](benchmarks/2026-11-17-macaq-r-media-rx580.json) · [Все замеры](benchmarks/) · [Патчи](patches/) · [Лицензии и компоненты](NOTICE.md)
