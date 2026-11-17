@@ -484,6 +484,13 @@ class Conversion:
         if plan['format'] == 'gguf-gsq-rco-vulkan-v1':
             sys.path.insert(0, str(HERE))
             try:
+                if target.get('whole_model') is True:
+                    reference = plan.get('reference')
+                    if not isinstance(reference, str) or plan.get('model_loss'):
+                        raise ValueError('Whole-checkpoint GSQ/RCO requires reference and recorded tensor activations.')
+                    from vulkan_full import optimize
+                    return optimize(self, manifest, local_gguf(plan.get('base')),
+                                    (manifest.parent / reference).resolve(strict=True), target, output, gguf_module)
                 if 'reference' in plan:
                     if plan.get('model_loss'):
                         raise ValueError('Для сохранения квантов укажите reference и активации. Оценка ведётся по тензорам.')

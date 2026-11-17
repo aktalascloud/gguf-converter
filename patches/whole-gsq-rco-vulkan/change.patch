@@ -1,0 +1,537 @@
+diff --git a/activation_calibration.py b/activation_calibration.py
+index 0410a87..fa137f3 100644
+--- a/activation_calibration.py
++++ b/activation_calibration.py
+@@ -1,5 +1,6 @@
+ """Activation-weighted Vulkan calibration with fixed GGUF layouts."""
+ from contextlib import ExitStack
++import json
+ from pathlib import Path
+ import tempfile
+ 
+@@ -32,21 +33,41 @@ def reference_rows(path, base, gguf_module, stack):
+                 raise ValueError(f'Исходный GGUF не содержит совпадающий тензор {t.name}.')
+             return decode(ref.data[part], ref.tensor_type).astype(np.float32, copy=False)
+         return gguf_rows
+-    if path.suffix.lower() not in ('.safetensors', '.sft'):
++    sharded = path.is_dir()
++    if not sharded and path.suffix.lower() not in ('.safetensors', '.sft'):
+         raise ValueError('Используйте GGUF или Safetensors в качестве исходника калибровки.')
+     from moss_convert import SafeFile, decode_rows
+-    ref = SafeFile(path)
+-    stack.callback(ref.data._mmap.close)
++    if sharded:
++        index = json.loads((path/'model.safetensors.index.json').read_text(encoding='utf-8'))['weight_map']
++        if not isinstance(index, dict) or any(not isinstance(name, str) or Path(name).name != name
++                                              or Path(name).suffix != '.safetensors' for name in index.values()):
++            raise ValueError('Invalid Safetensors shard index.')
++        sources = {}
++    else:
++        ref = SafeFile(path)
++        stack.callback(ref.data._mmap.close)
++        index = dict.fromkeys(ref.header, path.name)
++        sources = {path.name: ref}
++
+     def safe_rows(t, part):
+         short=t.name
+         for prefix in PREFIXES:
+             short=short.removeprefix(prefix)
+         aliases=[t.name, short, *(p+short for p in PREFIXES)]
+         if t.name.startswith('model.'):
+-            aliases.append('model.language_model.'+t.name.removeprefix('model.'))
+-        key=next((name for name in aliases if name in ref.header), None)
++            suffix = t.name.removeprefix('model.')
++            aliases.extend(('model.language_model.'+suffix, 'language_model.'+suffix))
++        key=next((name for name in aliases if name in index), None)
+         if key is None:
+             raise ValueError(f'В исходных весах не найден {t.name}.')
++        name = index[key]
++        if name not in sources:
++            shard = (path/name).resolve(strict=True)
++            if shard.parent != path.resolve():
++                raise ValueError('Safetensors shard escapes the reference directory.')
++            sources[name] = SafeFile(shard)
++            stack.callback(sources[name].data._mmap.close)
++        ref = sources[name]
+         info=ref.header[key]
+         layer=key.removesuffix('.weight')
+         scheme=ref.formats.get(layer,{})
+diff --git a/convert.py b/convert.py
+index ced25e6..3d29e5a 100644
+--- a/convert.py
++++ b/convert.py
+@@ -484,6 +484,13 @@ class Conversion:
+         if plan['format'] == 'gguf-gsq-rco-vulkan-v1':
+             sys.path.insert(0, str(HERE))
+             try:
++                if target.get('whole_model') is True:
++                    reference = plan.get('reference')
++                    if not isinstance(reference, str) or plan.get('model_loss'):
++                        raise ValueError('Whole-checkpoint GSQ/RCO requires reference and recorded tensor activations.')
++                    from vulkan_full import optimize
++                    return optimize(self, manifest, local_gguf(plan.get('base')),
++                                    (manifest.parent / reference).resolve(strict=True), target, output, gguf_module)
+                 if 'reference' in plan:
+                     if plan.get('model_loss'):
+                         raise ValueError('Для сохранения квантов укажите reference и активации. Оценка ведётся по тензорам.')
+diff --git a/docs/calibration.md b/docs/calibration.md
+index 18166b7..f129e70 100644
+--- a/docs/calibration.md
++++ b/docs/calibration.md
+@@ -22,6 +22,10 @@ Choose **GSQ/RCO** under Calibration and open a media GGUF or a `gguf-gsq-rco-vu
+ 
+ Paths are relative to the manifest. Use a NumPy `.npy` array of 2–32 activation rows for a matrix or `null` for capture. For automatic capture add `"capture": {"prompt": "…", "profile": "photo.kcpps"}`. A profile is optional for standalone diffusion models. Use `capture.base_part` to replace an encoder such as `sdclip1` and `capture.profile_root` to resolve relative paths in the profile. Enable `"model_loss": true` to rerank the feasible GSQ/RCO and rounding candidates by pixel MSE on a complete calibration render. The measured loss covers the complete output. GSQ still learns per-matrix weights, and RCO proposes a bounded set of configurations under an exact tensor-byte budget.
+ 
++### Whole-checkpoint GSQ/RCO
++
++For a recorded activation set, add `"reference": "original.safetensors"` at the manifest root and `"whole_model": true` to the selected target. `reference` accepts a matching Safetensors, GGUF or directory with `model.safetensors.index.json` and its shards. List up to 512 tensor names with 8–32 recorded activation rows each and set `max_tensor_bytes` to cap the full tensor payload, including tensors left unchanged. Vulkan GSQ scores three layouts on sampled output rows, then refines every row of the chosen layouts. Vulkan RCO allocates the global byte budget using held-out projection errors. The resulting GGUF uses standard quant formats. [GSQ](https://arxiv.org/abs/2604.18556) · [RCO](https://arxiv.org/abs/2605.00649)
++
+ Earlier local-batch calibration evidence is recorded by binary SHA. [v1.2.0 RX 580 measurements](../benchmarks/2026-11-16-rx580.json)
+ 
+ The v1.3.0 RX 580 check covers automatic capture on ABDM and Wan, photo generation without upscaling, a 480p five-frame clip, and GGUF sizes for all four standard formats. [v1.3.0 results](../benchmarks/2026-11-16-v130-rx580.json)
+diff --git a/portable_build.py b/portable_build.py
+index c8d5966..683b55a 100644
+--- a/portable_build.py
++++ b/portable_build.py
+@@ -112,7 +112,7 @@ def included(relative):
+ def build_vulkan(args, destination):
+     destination.mkdir()
+     source = HERE / 'vulkan'
+-    for mode in ('gsq', 'rco', 'loss', 'actcal', 'actcal_k', 'macaq_flip'):
++    for mode in ('gsq', 'rco', 'rco_full', 'loss', 'actcal', 'actcal_k', 'macaq_flip'):
+         subprocess.run([str(args.glslc), '--target-env=vulkan1.1', '-O',
+                         str(source / f'{mode}.comp'), '-o', str(destination / f'{mode}.spv')], check=True)
+     subprocess.run([str(args.cxx), '-std=c++17', '-O2', '-municode', '-static', '-static-libgcc', '-static-libstdc++',
+@@ -152,7 +152,7 @@ def build(args):
+         for engine in ('llama', 'sd'):
+             copy_crt(crt, backends / engine)
+         shutil.copytree(args.hf, backends / 'hf', ignore=shutil.ignore_patterns('__pycache__', 'tests', 'examples'))
+-        for filename in ('convert.py', 'hardware.py', 'gpu_adapter.py', 'hf.py', 'moss_convert.py', 'media_weights.py', 'vulkan_workflow.py', 'native_capture.py', 'activation_calibration.py', 'macaq_refinement.py',
++        for filename in ('convert.py', 'hardware.py', 'gpu_adapter.py', 'hf.py', 'moss_convert.py', 'media_weights.py', 'vulkan_workflow.py', 'vulkan_full.py', 'native_capture.py', 'activation_calibration.py', 'macaq_refinement.py',
+                          'LICENSE.md', 'NOTICE.md'):
+             shutil.copyfile(HERE / filename, app / filename)
+         shutil.copytree(HERE / 'licenses', app / 'licenses')
+diff --git a/vulkan/gsq.comp b/vulkan/gsq.comp
+index f1c9497..be48b5f 100644
+--- a/vulkan/gsq.comp
++++ b/vulkan/gsq.comp
+@@ -28,6 +28,7 @@ uint mix_bits(uint x) {
+ }
+ 
+ float activation(uint block_id, uint sample_id, uint column) {
++    if (pc.target>0.0) block_id%=uint(pc.target);
+     return input_data[pc.blocks*256u + (block_id*pc.samples+sample_id)*256u+column];
+ }
+ 
+diff --git a/vulkan/rco_full.comp b/vulkan/rco_full.comp
+new file mode 100644
+index 0000000..2e8ddd4
+--- /dev/null
++++ b/vulkan/rco_full.comp
+@@ -0,0 +1,128 @@
++#version 450
++layout(local_size_x=64) in;
++layout(binding=0,std430) readonly buffer Inputs { float data[]; };
++layout(binding=1,std430) writeonly buffer Outputs { float result[]; };
++layout(push_constant) uniform Config {
++    uint groups;
++    uint steps;
++    uint samples;
++    uint variants;
++    uint seed;
++    float target;
++} pc;
++
++// Each lane owns up to eight tensor groups with three quantization choices.
++vec3 alpha[8], cost[8], loss[8], normal[8], first[8], second[8];
++shared vec2 sums[64];
++uint lane, owned;
++
++vec2 sum_lanes(vec2 value) {
++    sums[lane]=value;
++    barrier();
++    for (uint stride=32u;stride>0u;stride>>=1u) {
++        if (lane<stride) sums[lane]+=sums[lane+stride];
++        barrier();
++    }
++    value=sums[0];
++    barrier();
++    return value;
++}
++
++vec3 probability(vec3 z) {
++    vec3 e=exp(z-max(z.x,max(z.y,z.z)));
++    return e/(e.x+e.y+e.z);
++}
++
++float budget(float shift) {
++    float local=0.0;
++    for (uint i=0u;i<owned;++i) local+=dot(probability(alpha[i]+shift*cost[i]),cost[i]);
++    return sum_lanes(vec2(local,0)).x;
++}
++
++float retract() {
++    float lo=-1.0,hi=1.0;
++    for (uint k=0u;k<24u;++k) {
++        float a=budget(lo),b=budget(hi);
++        if (a<=pc.target && b>=pc.target) break;
++        if (a>pc.target) lo*=2.0;
++        if (b<pc.target) hi*=2.0;
++    }
++    for (uint k=0u;k<28u;++k) {
++        float mid=0.5*(lo+hi);
++        if (budget(mid)>pc.target) hi=mid;
++        else lo=mid;
++    }
++    float shift=0.5*(lo+hi);
++    for (uint i=0u;i<owned;++i) {
++        alpha[i]+=shift*cost[i];
++        vec3 p=probability(alpha[i]);
++        normal[i]=p*(cost[i]-dot(p,cost[i]));
++    }
++    return budget(0.0);
++}
++
++uint mix_bits(uint x) {
++    x=(x^(x>>16))*0x7feb352du;
++    x=(x^(x>>15))*0x846ca68bu;
++    return x^(x>>16);
++}
++
++void main() {
++    lane=gl_LocalInvocationIndex;
++    owned=lane<pc.groups ? 1u+(pc.groups-1u-lane)/64u : 0u;
++    for (uint i=0u;i<owned;++i) {
++        uint b=(lane+64u*i)*3u, offset=pc.groups*3u;
++        cost[i]=vec3(data[b],data[b+1u],data[b+2u]);
++        loss[i]=vec3(data[offset+b],data[offset+b+1u],data[offset+b+2u]);
++        alpha[i]=first[i]=second[i]=vec3(0);
++    }
++    float value=retract(),peak_error=abs(value-pc.target),beta1=1.0,beta2=1.0;
++    for (uint step=0u;step<pc.steps;++step) {
++        vec3 gradient[8];
++        vec2 local=vec2(0);
++        float tau=mix(1.8,0.35,float(step)/float(pc.steps-1u));
++        for (uint i=0u;i<owned;++i) {
++            uint key=pc.seed ^ (lane+64u*i+1u)*747796405u ^ (step+1u)*277803737u;
++            uvec3 rng=uvec3(mix_bits(key),mix_bits(key^0x7f4a7c15u),mix_bits(key^0x94d049bbu));
++            vec3 u=clamp((vec3(rng>>8u)+0.5)/16777216.0,1e-7,1.0-1e-7);
++            vec3 z=alpha[i]-log(-log(u));
++            vec3 p=probability(z/tau);
++            uint hard=z.x>=max(z.y,z.z) ? 0u : (z.y>=z.z ? 1u : 2u);
++            // Straight-through gradient of one independent residual coordinate per tensor.
++            vec3 residual=sqrt(loss[i]);
++            gradient[i]=2.0*p*(residual-dot(p,residual))*residual[hard]/tau;
++            local+=vec2(dot(gradient[i],normal[i]),dot(normal[i],normal[i]));
++        }
++        vec2 norm=sum_lanes(local);
++        float coefficient=norm.x/max(norm.y,1e-16);
++        beta1*=0.9;
++        beta2*=0.999;
++        for (uint i=0u;i<owned;++i) {
++            vec3 g=gradient[i]-coefficient*normal[i];
++            first[i]=0.9*first[i]+0.1*g;
++            second[i]=0.999*second[i]+0.001*g*g;
++            alpha[i]-=0.08*(first[i]/(1.0-beta1))/(sqrt(second[i]/(1.0-beta2))+1e-8);
++        }
++        value=retract();
++        peak_error=max(peak_error,abs(value-pc.target));
++        local=vec2(0);
++        for (uint i=0u;i<owned;++i) local+=vec2(dot(first[i],normal[i]),dot(normal[i],normal[i]));
++        norm=sum_lanes(local);
++        coefficient=norm.x/max(norm.y,1e-16);
++        for (uint i=0u;i<owned;++i) first[i]-=coefficient*normal[i];
++    }
++    for (uint i=0u;i<owned;++i) {
++        uint g=lane+64u*i,b=g*3u+pc.groups+4u;
++        vec3 a=alpha[i];
++        result[g]=float(a.x>=max(a.y,a.z) ? 0u : (a.y>=a.z ? 1u : 2u));
++        result[b]=a.x;
++        result[b+1u]=a.y;
++        result[b+2u]=a.z;
++    }
++    if (lane==0u) {
++        result[pc.groups]=value;
++        result[pc.groups+1u]=0.0;
++        result[pc.groups+2u]=0.0;
++        result[pc.groups+3u]=peak_error;
++    }
++}
+diff --git a/vulkan/vulkan-gsq.cpp b/vulkan/vulkan-gsq.cpp
+index a5a097d..56f9d28 100644
+--- a/vulkan/vulkan-gsq.cpp
++++ b/vulkan/vulkan-gsq.cpp
+@@ -106,25 +106,31 @@ int wmain(int argc, wchar_t ** argv) try {
+         return 0;
+     }
+     if (argc!=12) throw std::runtime_error("usage: vulkan-gsq MODE INPUT OUTPUT SHADER BLOCKS STEPS SAMPLES BITS SEED TARGET REPEATS");
+-    const bool rco=std::wcscmp(argv[1],L"rco")==0;
++    const bool rco_full=std::wcscmp(argv[1],L"rco_full")==0;
++    const bool rco=rco_full || std::wcscmp(argv[1],L"rco")==0;
+     const bool loss=std::wcscmp(argv[1],L"loss")==0;
+     const bool actcal=std::wcscmp(argv[1],L"actcal")==0;
+     const bool actcal_k=std::wcscmp(argv[1],L"actcal-k")==0;
+     const bool flip=std::wcscmp(argv[1],L"macaq-flip")==0;
+-    if (!rco && !loss && !actcal && !actcal_k && !flip && std::wcscmp(argv[1],L"gsq")!=0) throw std::runtime_error("unknown mode");
++    const bool gsq_shared=std::wcscmp(argv[1],L"gsq_shared")==0;
++    if (!rco && !loss && !actcal && !actcal_k && !flip && !gsq_shared && std::wcscmp(argv[1],L"gsq")!=0) throw std::runtime_error("unknown mode");
+     wchar_t * target_end=nullptr;
+     const float target=std::wcstof(argv[10],&target_end);
+     if (target_end==argv[10] || *target_end || !std::isfinite(target)) throw std::runtime_error("invalid target");
+-    const Parameters pc={integer(argv[5],actcal||flip?262144:(actcal_k?32768:(rco?8:4096))),integer(argv[6],actcal||flip?8:128),integer(argv[7],actcal||flip?2048:(actcal_k?256:32)),
++    const unsigned block_limit=gsq_shared?16384:(rco_full?512:(actcal||flip?262144:(actcal_k?32768:(rco?8:4096))));
++    const Parameters pc={integer(argv[5],block_limit),integer(argv[6],actcal||flip?8:128),integer(argv[7],actcal||flip?2048:(actcal_k?256:32)),
+                          integer(argv[8],8),integer(argv[9],UINT32_MAX),target};
+     const unsigned repeats=integer(argv[11],16);
+     if (!pc.blocks || !pc.samples || (rco && ((pc.bits!=3 && pc.bits!=4) || pc.steps<2)) ||
++        (rco_full && (pc.samples!=1 || pc.bits!=3 || pc.steps>32)) ||
++        (gsq_shared && (target<1 || target>4096 || target!=std::floor(target) || pc.blocks%uint32_t(target)!=0)) ||
+         (actcal && (pc.bits!=4 && pc.bits!=8)) ||
+         (actcal_k && (pc.bits<1 || pc.bits>2 || pc.blocks%pc.samples!=0)) ||
+         (flip && ((pc.bits!=4 && pc.bits!=5 && pc.bits!=6 && pc.bits!=8) || pc.blocks%pc.samples!=0)) ||
+         (!rco && !loss && !actcal && !actcal_k && !flip && pc.bits!=2 && pc.bits!=3 && pc.bits!=4 && pc.bits!=6 && pc.bits!=8) ||
+         repeats==0) throw std::runtime_error("parameters outside the supported range");
+-    const size_t input_floats=flip ? size_t(pc.blocks)*96+pc.samples*1024 : actcal_k ? (size_t(pc.blocks)*(pc.bits+1)+pc.samples)*256 :
++    const size_t input_floats=gsq_shared ? (size_t(pc.blocks)+size_t(target)*pc.samples)*256 :
++        flip ? size_t(pc.blocks)*96+pc.samples*1024 : actcal_k ? (size_t(pc.blocks)*(pc.bits+1)+pc.samples)*256 :
+         (actcal ? size_t(pc.blocks)*33+pc.samples*32 : (loss ? size_t(pc.blocks)*512 : size_t(pc.blocks)*(rco?pc.bits:256)*(1+pc.samples)));
+     const size_t output_floats=flip ? size_t(pc.blocks)*8 : actcal_k ? size_t(pc.blocks)*pc.bits :
+         (actcal ? size_t(pc.blocks)*(pc.bits==4?5:9) : (loss ? pc.blocks : (rco ? pc.blocks+4+pc.blocks*pc.bits : size_t(pc.blocks)*266)));
+diff --git a/vulkan_full.py b/vulkan_full.py
+new file mode 100644
+index 0000000..10038c2
+--- /dev/null
++++ b/vulkan_full.py
+@@ -0,0 +1,214 @@
++"""Whole-checkpoint GSQ and byte-constrained RCO on Vulkan."""
++from collections import Counter
++from contextlib import ExitStack
++from pathlib import Path
++from tempfile import TemporaryDirectory
++
++import numpy as np
++
++from activation_calibration import reference_rows
++from vulkan_workflow import BLOCK, BLOCK_BYTES, dispatch, pack_k, rtn
++
++
++VARIANTS = {
++    'Q4_0': ('Q3_K', 'Q4_0', 'Q6_K'),
++    'Q4_1': ('Q4_0', 'Q4_1', 'Q6_K'),
++    'Q4_K': ('Q3_K', 'Q4_K', 'Q6_K'),
++    'Q6_K': ('Q4_K', 'Q6_K', 'Q8_0'),
++    'Q8_0': ('Q4_0', 'Q6_K', 'Q8_0'),
++}
++NARROW = ('Q4_0', 'Q4_1', 'Q8_0')
++
++
++def row_bytes(kind, width):
++    size = {'Q4_0': 144, 'Q4_1': 160}.get(kind.name, BLOCK_BYTES[int(kind.name[1])])
++    return width * size // BLOCK
++
++
++def pack(codes, scales, kind, center):
++    if kind.name != 'Q4_1':
++        return pack_k(codes, scales, int(kind.name[1]), legacy_q4=kind.name == 'Q4_0')
++    scale = scales.astype('<f2')
++    minimum = (center - 8 * scale.astype(np.float32)).astype('<f2')
++    if not np.isfinite(scale).all() or not np.isfinite(minimum).all():
++        raise ValueError('Q4_1 scale or offset is outside the FP16 range.')
++    pairs = (codes + 8).astype(np.uint8).reshape(-1, 8, 2, 16)
++    data = pairs[:, :, 0] | (pairs[:, :, 1] << 4)
++    return np.concatenate((scale.view(np.uint8).reshape(-1, 8, 2),
++                           minimum.view(np.uint8).reshape(-1, 8, 2), data), axis=2).reshape(-1, 160)
++
++
++def fit_rows(converter, binaries, work, ref, stock, kind, train, valid, decode, steps, seed):
++    rows, width = ref.shape
++    original_width = width
++    pad = (-width) % BLOCK
++    if pad:
++        ref, train, valid = (np.pad(x, ((0, 0), (0, pad))) for x in (ref, train, valid))
++        if stock is not None:
++            stock = np.pad(stock, ((0, 0), (0, row_bytes(kind, pad))))
++        width += pad
++    ncols = width // BLOCK
++    weights = ref.reshape(-1, BLOCK)
++    center = None
++    if kind.name == 'Q4_1':
++        values = weights.reshape(-1, 8, 32)
++        center = (values.max(axis=2) + values.min(axis=2)) * 0.5
++        weights = weights - np.repeat(center, 32, axis=1)
++    activation = train.reshape(len(train), ncols, BLOCK).transpose(1, 0, 2)
++    payload = np.concatenate((weights.ravel(), activation.ravel()))
++    bits, n = int(kind.name[1]), len(weights)
++    raw = dispatch(converter.run, binaries, work, 'gsq_shared', payload, n, steps, len(train), bits, seed,
++                   budget=ncols)
++    learnt = pack(raw[:n*BLOCK].reshape(n, BLOCK), raw[n*258:].reshape(n, 8), kind, center)
++    rounded = pack(*rtn(weights, bits), kind, center) if stock is None else stock.reshape(n, -1)
++    old = decode(rounded, kind).reshape(rows, ncols, BLOCK)
++    new = decode(learnt, kind).reshape(rows, ncols, BLOCK)
++    expected = ref.reshape(rows, ncols, BLOCK)
++    probes = activation.transpose(0, 2, 1)
++    old_error = ((old - expected)[..., None, :] @ probes).reshape(rows, ncols, -1)
++    new_error = ((new - expected)[..., None, :] @ probes).reshape(rows, ncols, -1)
++    improved = np.sum(new_error**2, axis=-1) < np.sum(old_error**2, axis=-1)
++    selected = np.where(improved.reshape(n, 1), learnt, rounded).reshape(rows, -1)
++    output = np.where(improved[..., None], new, old).reshape(rows, width)
++    error = ((output - ref) @ valid.T)**2
++    return selected[:, :row_bytes(kind, original_width)], float(error.sum(dtype=np.float64))
++
++
++def choose(converter, binaries, root, costs, errors, budget):
++    """Project continuous RCO scores to a feasible discrete byte assignment."""
++    group = np.arange(len(costs))
++    minimum, maximum = int(costs[:, 0].sum()), int(costs[:, -1].sum())
++    if budget < minimum:
++        raise ValueError(f'Tensor budget requires at least {minimum:,} eligible bytes.')
++    if budget == minimum:
++        return np.zeros(len(group), dtype=int), None
++    if budget >= maximum:
++        return np.argmin(errors, axis=1), None
++    relative_cost = (costs - costs[:, :1]) / (maximum - minimum)
++    target = (budget - minimum) / (maximum - minimum)
++    losses = errors / max(float(errors.max()), 1e-20)
++    raw = dispatch(converter.run, binaries, root, 'rco_full',
++                   np.concatenate((relative_cost.ravel(), losses.ravel())), len(group), 16, 1, 3, 1729, target)
++    residual = float(raw[len(group)+3])
++    if residual > 1e-5 or abs(float(raw[len(group)])-target) > 1e-5:
++        raise RuntimeError('Vulkan RCO did not retract to the requested budget.')
++    scores = raw[len(group)+4:].reshape(-1, 3).astype(np.float64)
++
++    def allocation(penalty):
++        return np.argmax(scores - penalty * relative_cost, axis=1)
++
++    selected = allocation(0)
++    if int(costs[group, selected].sum()) > budget:
++        lo, hi = 0., 1.
++        while int(costs[group, allocation(hi)].sum()) > budget:
++            hi *= 2
++        for _ in range(48):
++            mid = (lo + hi) * .5
++            if int(costs[group, allocation(mid)].sum()) > budget:
++                lo = mid
++            else:
++                hi = mid
++        selected = allocation(hi)
++
++    # Keep the actual serialized payload under the exact integer budget.
++    left = budget - int(costs[group, selected].sum())
++    improvements = []
++    for g, current in enumerate(selected):
++        for variant in range(3):
++            delta = int(costs[g, variant] - costs[g, current])
++            gain = errors[g, current] - errors[g, variant]
++            if gain > 0 and delta >= 0:
++                improvements.append((-gain / max(delta, 1), g, current, variant, delta))
++    for _, g, current, variant, delta in sorted(improvements):
++        if current == selected[g] and delta <= left:
++            selected[g] = variant
++            left -= delta
++    assert int(costs[group, selected].sum()) <= budget
++    return selected, residual
++
++
++def optimize(converter, manifest, base, reference, target, output, gguf_module, *, binaries=None, evidence=None):
++    specs = target.get('tensors')
++    budget, steps = target.get('max_tensor_bytes'), target.get('steps', 2)
++    if base.endianess.name != 'LITTLE' or not isinstance(specs, dict) or not 1 <= len(specs) <= 512:
++        raise ValueError('Full Vulkan GSQ/RCO needs a little-endian GGUF and 1–512 recorded activations.')
++    if type(budget) is not int or budget <= 0 or type(steps) is not int or not 1 <= steps <= 16:
++        raise ValueError('Set an integer tensor byte budget and 1–16 full GSQ steps.')
++    all_weights = {t.name: t for t in base.tensors}
++    quants = gguf_module('quants')
++    qtypes = gguf_module('constants').GGMLQuantizationType
++    binaries = binaries or Path(__file__).resolve().parent / 'vulkan'
++    costs, entries = [], []
++    for name, relative in specs.items():
++        t = all_weights.get(name)
++        if t is None or len(t.shape) != 2 or not 32 <= int(t.shape[0]) <= BLOCK * 4096 or int(t.shape[0]) % 32:
++            raise ValueError(f'{name}: expected a two-dimensional weight with a width divisible by 32.')
++        if t.tensor_type.name not in VARIANTS or not isinstance(relative, str) or Path(relative).suffix.lower() != '.npy':
++            raise ValueError(f'{name}: expected a supported layout and recorded .npy activations.')
++        path = (manifest.parent / relative).resolve(strict=True)
++        x = np.load(path, allow_pickle=False)
++        if not isinstance(x, np.ndarray):
++            x.close()
++            raise ValueError(f'{name}: expected a NumPy array.')
++        x = x.astype(np.float32, copy=False)
++        if x.ndim != 2 or x.shape[1] != t.shape[0] or not 8 <= len(x) <= 32 or not np.isfinite(x).all():
++            raise ValueError(f'{name}: expected 8–32 finite activation rows matching the tensor width.')
++        width = int(t.shape[0])
++        if width % BLOCK and t.tensor_type.name not in NARROW:
++            raise ValueError(f'{name}: the chosen K-quant layout needs width divisible by 256.')
++        kinds = tuple(qtypes[k] for k in (NARROW if width % BLOCK else VARIANTS[t.tensor_type.name]))
++        costs.append([int(t.shape[1]) * row_bytes(k, width) for k in kinds])
++        entries.append((t, kinds, x[:min(8, len(x)*3//4)], x[len(x)*3//4:]))
++    retained = sum(t.n_bytes for t in base.tensors if t.name not in specs)
++    costs = np.asarray(costs, dtype=np.int64)
++    if budget - retained < int(costs[:, 0].sum()):
++        raise ValueError('The requested budget cannot fit the least costly layouts.')
++
++    with TemporaryDirectory(prefix='.gguf-full-gsq-', dir=output.parent) as directory, ExitStack() as maps:
++        root = Path(directory)
++        read = reference_rows(reference, base, gguf_module, maps)
++        errors = np.zeros(costs.shape, dtype=np.float64)
++        for i, (t, kinds, train, valid) in enumerate(entries):
++            rows = int(t.shape[1])
++            indices = np.unique(np.linspace(0, rows-1, min(32, rows), dtype=int))
++            ref = np.concatenate([read(t, slice(j, j+1)) for j in indices])
++            energy = max(float(((ref @ valid.T)**2).sum(dtype=np.float64)), 1e-30)
++            old = t.data[indices]
++            for k, kind in enumerate(kinds):
++                stock = old if kind == t.tensor_type else None
++                _, error = fit_rows(converter, binaries, root, ref, stock, kind, train, valid, quants.dequantize,
++                                    steps, 1729+i*3+k)
++                errors[i, k] = error / energy
++            converter.stage('GSQ/RCO · оценка типов', i+1, len(entries))
++        selected, residual = choose(converter, binaries, root, costs, errors, budget - retained)
++        replacements, fit = {}, {}
++        for i, ((t, kinds, train, valid), choice) in enumerate(zip(entries, selected)):
++            kind = kinds[choice]
++            width, rows = map(int, t.shape)
++            batch = max(1, min(16384, 32768//steps) // ((width+BLOCK-1)//BLOCK))
++            out = np.memmap(root/f'weight-{i}.bin', dtype=np.uint8, mode='w+',
++                            shape=(rows, row_bytes(kind, width)))
++            maps.callback(out._mmap.close)
++            before = after = 0.
++            for start in range(0, rows, batch):
++                part = slice(start, min(rows, start+batch))
++                ref, old = read(t, part), t.data[part]
++                stock = old if kind == t.tensor_type else None
++                out[part], error = fit_rows(converter, binaries, root, ref, stock, kind, train, valid,
++                                            quants.dequantize, steps, (3451+i*65537+start) % (1<<32))
++                before += float((((quants.dequantize(old, t.tensor_type)-ref) @ valid.T)**2).sum(dtype=np.float64))
++                after += error
++            keep = kind != t.tensor_type or after < before
++            if keep:
++                replacements[t.name] = out, kind
++            fit[t.name] = {'stock': t.tensor_type.name, 'selected': kind.name, 'rows': rows,
++                           'before': before, 'after': after if keep else before}
++            converter.log(f'GSQ {i+1}/{len(entries)} · {t.name} · {kind.name} · {before:.6g} → {fit[t.name]["after"]:.6g}')
++            converter.stage('GSQ · все строки', i+1, len(entries))
++        payload = retained + int(costs[np.arange(len(entries)), selected].sum())
++        if evidence is not None:
++            evidence.update(payload=payload, budget=budget, residual=residual, tensors=fit,
++                            layouts=dict(Counter(row['selected'] for row in fit.values())))
++        converter.log(f'RCO GGUF payload: {payload:,} / {budget:,} bytes.')
++        same_layout = all(kind == all_weights[name].tensor_type for name, (_, kind) in replacements.items())
++        return converter.write_mixed_gguf(base, output, replacements, preserve_file_type=same_layout)
+diff --git a/vulkan_workflow.py b/vulkan_workflow.py
+index b52e14c..1073dce 100644
+--- a/vulkan_workflow.py
++++ b/vulkan_workflow.py
+@@ -70,10 +70,11 @@ def pack_k(codes, scales, bits, *, legacy_q4=False):
+ def dispatch(run, binaries, work, mode, payload, count, steps, samples, bits, seed, budget=0, repeats=1):
+     data, result = work / 'input.bin', work / 'output.bin'
+     np.asarray(payload, dtype='<f4').tofile(data)
+-    run(binaries / 'vulkan-gsq.exe', mode, data, result, binaries / f'{mode}.spv',
++    shader = 'gsq' if mode == 'gsq_shared' else mode
++    run(binaries / 'vulkan-gsq.exe', mode, data, result, binaries / f'{shader}.spv',
+         count, steps, samples, bits, seed, budget, repeats)
+     output = np.fromfile(result, dtype='<f4')
+-    expected = {'gsq': count * 266, 'rco': count * (bits + 1) + 4, 'loss': count}[mode]
++    expected = {'gsq': count * 266, 'rco': count * (bits + 1) + 4, 'loss': count}[shader.removesuffix('_full')]
+     if output.size != expected or not np.isfinite(output).all():
+         raise RuntimeError('Invalid Vulkan calibration result.')
+     return output

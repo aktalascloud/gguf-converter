@@ -70,10 +70,11 @@ def pack_k(codes, scales, bits, *, legacy_q4=False):
 def dispatch(run, binaries, work, mode, payload, count, steps, samples, bits, seed, budget=0, repeats=1):
     data, result = work / 'input.bin', work / 'output.bin'
     np.asarray(payload, dtype='<f4').tofile(data)
-    run(binaries / 'vulkan-gsq.exe', mode, data, result, binaries / f'{mode}.spv',
+    shader = 'gsq' if mode == 'gsq_shared' else mode
+    run(binaries / 'vulkan-gsq.exe', mode, data, result, binaries / f'{shader}.spv',
         count, steps, samples, bits, seed, budget, repeats)
     output = np.fromfile(result, dtype='<f4')
-    expected = {'gsq': count * 266, 'rco': count * (bits + 1) + 4, 'loss': count}[mode]
+    expected = {'gsq': count * 266, 'rco': count * (bits + 1) + 4, 'loss': count}[shader.removesuffix('_full')]
     if output.size != expected or not np.isfinite(output).all():
         raise RuntimeError('Invalid Vulkan calibration result.')
     return output

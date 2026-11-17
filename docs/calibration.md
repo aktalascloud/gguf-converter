@@ -22,6 +22,10 @@ Choose **GSQ/RCO** under Calibration and open a media GGUF or a `gguf-gsq-rco-vu
 
 Paths are relative to the manifest. Use a NumPy `.npy` array of 2–32 activation rows for a matrix or `null` for capture. For automatic capture add `"capture": {"prompt": "…", "profile": "photo.kcpps"}`. A profile is optional for standalone diffusion models. Use `capture.base_part` to replace an encoder such as `sdclip1` and `capture.profile_root` to resolve relative paths in the profile. Enable `"model_loss": true` to rerank the feasible GSQ/RCO and rounding candidates by pixel MSE on a complete calibration render. The measured loss covers the complete output. GSQ still learns per-matrix weights, and RCO proposes a bounded set of configurations under an exact tensor-byte budget.
 
+### Whole-checkpoint GSQ/RCO
+
+For a recorded activation set, add `"reference": "original.safetensors"` at the manifest root and `"whole_model": true` to the selected target. `reference` accepts a matching Safetensors, GGUF or directory with `model.safetensors.index.json` and its shards. List up to 512 tensor names with 8–32 recorded activation rows each and set `max_tensor_bytes` to cap the full tensor payload, including tensors left unchanged. Vulkan GSQ scores three layouts on sampled output rows, then refines every row of the chosen layouts. Vulkan RCO allocates the global byte budget using held-out projection errors. The resulting GGUF uses standard quant formats. [GSQ](https://arxiv.org/abs/2604.18556) · [RCO](https://arxiv.org/abs/2605.00649)
+
 Earlier local-batch calibration evidence is recorded by binary SHA. [v1.2.0 RX 580 measurements](../benchmarks/2026-11-16-rx580.json)
 
 The v1.3.0 RX 580 check covers automatic capture on ABDM and Wan, photo generation without upscaling, a 480p five-frame clip, and GGUF sizes for all four standard formats. [v1.3.0 results](../benchmarks/2026-11-16-v130-rx580.json)

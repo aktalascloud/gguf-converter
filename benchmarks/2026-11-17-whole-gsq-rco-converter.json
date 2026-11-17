@@ -1,0 +1,16 @@
+{
+  "sha256": "fb92296be1891b1461ecd8a4c965dbb06ee30156ef1d8e26da2a171ffbf36440",
+  "bytes": 237178368,
+  "gui": true,
+  "weighted_calibration": true,
+  "whole_model": true,
+  "sharded_bf16": true,
+  "tensor_count": 3,
+  "layouts": [
+    "Q8_0",
+    "Q6_K",
+    "Q8_0"
+  ],
+  "tensor_payload": 26304,
+  "tensor_budget": 27156
+}

@@ -28,6 +28,7 @@ uint mix_bits(uint x) {
 }
 
 float activation(uint block_id, uint sample_id, uint column) {
+    if (pc.target>0.0) block_id%=uint(pc.target);
     return input_data[pc.blocks*256u + (block_id*pc.samples+sample_id)*256u+column];
 }
 

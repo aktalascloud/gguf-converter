@@ -1,5 +1,6 @@
 """Activation-weighted Vulkan calibration with fixed GGUF layouts."""
 from contextlib import ExitStack
+import json
 from pathlib import Path
 import tempfile
 
@@ -32,21 +33,41 @@ def reference_rows(path, base, gguf_module, stack):
                 raise ValueError(f'Исходный GGUF не содержит совпадающий тензор {t.name}.')
             return decode(ref.data[part], ref.tensor_type).astype(np.float32, copy=False)
         return gguf_rows
-    if path.suffix.lower() not in ('.safetensors', '.sft'):
+    sharded = path.is_dir()
+    if not sharded and path.suffix.lower() not in ('.safetensors', '.sft'):
         raise ValueError('Используйте GGUF или Safetensors в качестве исходника калибровки.')
     from moss_convert import SafeFile, decode_rows
-    ref = SafeFile(path)
-    stack.callback(ref.data._mmap.close)
+    if sharded:
+        index = json.loads((path/'model.safetensors.index.json').read_text(encoding='utf-8'))['weight_map']
+        if not isinstance(index, dict) or any(not isinstance(name, str) or Path(name).name != name
+                                              or Path(name).suffix != '.safetensors' for name in index.values()):
+            raise ValueError('Invalid Safetensors shard index.')
+        sources = {}
+    else:
+        ref = SafeFile(path)
+        stack.callback(ref.data._mmap.close)
+        index = dict.fromkeys(ref.header, path.name)
+        sources = {path.name: ref}
+
     def safe_rows(t, part):
         short=t.name
         for prefix in PREFIXES:
             short=short.removeprefix(prefix)
         aliases=[t.name, short, *(p+short for p in PREFIXES)]
         if t.name.startswith('model.'):
-            aliases.append('model.language_model.'+t.name.removeprefix('model.'))
-        key=next((name for name in aliases if name in ref.header), None)
+            suffix = t.name.removeprefix('model.')
+            aliases.extend(('model.language_model.'+suffix, 'language_model.'+suffix))
+        key=next((name for name in aliases if name in index), None)
         if key is None:
             raise ValueError(f'В исходных весах не найден {t.name}.')
+        name = index[key]
+        if name not in sources:
+            shard = (path/name).resolve(strict=True)
+            if shard.parent != path.resolve():
+                raise ValueError('Safetensors shard escapes the reference directory.')
+            sources[name] = SafeFile(shard)
+            stack.callback(sources[name].data._mmap.close)
+        ref = sources[name]
         info=ref.header[key]
         layer=key.removesuffix('.weight')
         scheme=ref.formats.get(layer,{})

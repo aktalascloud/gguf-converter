@@ -106,25 +106,31 @@ int wmain(int argc, wchar_t ** argv) try {
         return 0;
     }
     if (argc!=12) throw std::runtime_error("usage: vulkan-gsq MODE INPUT OUTPUT SHADER BLOCKS STEPS SAMPLES BITS SEED TARGET REPEATS");
-    const bool rco=std::wcscmp(argv[1],L"rco")==0;
+    const bool rco_full=std::wcscmp(argv[1],L"rco_full")==0;
+    const bool rco=rco_full || std::wcscmp(argv[1],L"rco")==0;
     const bool loss=std::wcscmp(argv[1],L"loss")==0;
     const bool actcal=std::wcscmp(argv[1],L"actcal")==0;
     const bool actcal_k=std::wcscmp(argv[1],L"actcal-k")==0;
     const bool flip=std::wcscmp(argv[1],L"macaq-flip")==0;
-    if (!rco && !loss && !actcal && !actcal_k && !flip && std::wcscmp(argv[1],L"gsq")!=0) throw std::runtime_error("unknown mode");
+    const bool gsq_shared=std::wcscmp(argv[1],L"gsq_shared")==0;
+    if (!rco && !loss && !actcal && !actcal_k && !flip && !gsq_shared && std::wcscmp(argv[1],L"gsq")!=0) throw std::runtime_error("unknown mode");
     wchar_t * target_end=nullptr;
     const float target=std::wcstof(argv[10],&target_end);
     if (target_end==argv[10] || *target_end || !std::isfinite(target)) throw std::runtime_error("invalid target");
-    const Parameters pc={integer(argv[5],actcal||flip?262144:(actcal_k?32768:(rco?8:4096))),integer(argv[6],actcal||flip?8:128),integer(argv[7],actcal||flip?2048:(actcal_k?256:32)),
+    const unsigned block_limit=gsq_shared?16384:(rco_full?512:(actcal||flip?262144:(actcal_k?32768:(rco?8:4096))));
+    const Parameters pc={integer(argv[5],block_limit),integer(argv[6],actcal||flip?8:128),integer(argv[7],actcal||flip?2048:(actcal_k?256:32)),
                          integer(argv[8],8),integer(argv[9],UINT32_MAX),target};
     const unsigned repeats=integer(argv[11],16);
     if (!pc.blocks || !pc.samples || (rco && ((pc.bits!=3 && pc.bits!=4) || pc.steps<2)) ||
+        (rco_full && (pc.samples!=1 || pc.bits!=3 || pc.steps>32)) ||
+        (gsq_shared && (target<1 || target>4096 || target!=std::floor(target) || pc.blocks%uint32_t(target)!=0)) ||
         (actcal && (pc.bits!=4 && pc.bits!=8)) ||
         (actcal_k && (pc.bits<1 || pc.bits>2 || pc.blocks%pc.samples!=0)) ||
         (flip && ((pc.bits!=4 && pc.bits!=5 && pc.bits!=6 && pc.bits!=8) || pc.blocks%pc.samples!=0)) ||
         (!rco && !loss && !actcal && !actcal_k && !flip && pc.bits!=2 && pc.bits!=3 && pc.bits!=4 && pc.bits!=6 && pc.bits!=8) ||
         repeats==0) throw std::runtime_error("parameters outside the supported range");
-    const size_t input_floats=flip ? size_t(pc.blocks)*96+pc.samples*1024 : actcal_k ? (size_t(pc.blocks)*(pc.bits+1)+pc.samples)*256 :
+    const size_t input_floats=gsq_shared ? (size_t(pc.blocks)+size_t(target)*pc.samples)*256 :
+        flip ? size_t(pc.blocks)*96+pc.samples*1024 : actcal_k ? (size_t(pc.blocks)*(pc.bits+1)+pc.samples)*256 :
         (actcal ? size_t(pc.blocks)*33+pc.samples*32 : (loss ? size_t(pc.blocks)*512 : size_t(pc.blocks)*(rco?pc.bits:256)*(1+pc.samples)));
     const size_t output_floats=flip ? size_t(pc.blocks)*8 : actcal_k ? size_t(pc.blocks)*pc.bits :
         (actcal ? size_t(pc.blocks)*(pc.bits==4?5:9) : (loss ? pc.blocks : (rco ? pc.blocks+4+pc.blocks*pc.bits : size_t(pc.blocks)*266)));

@@ -1,0 +1,128 @@
+#version 450
+layout(local_size_x=64) in;
+layout(binding=0,std430) readonly buffer Inputs { float data[]; };
+layout(binding=1,std430) writeonly buffer Outputs { float result[]; };
+layout(push_constant) uniform Config {
+    uint groups;
+    uint steps;
+    uint samples;
+    uint variants;
+    uint seed;
+    float target;
+} pc;
+
+// Each lane owns up to eight tensor groups with three quantization choices.
+vec3 alpha[8], cost[8], loss[8], normal[8], first[8], second[8];
+shared vec2 sums[64];
+uint lane, owned;
+
+vec2 sum_lanes(vec2 value) {
+    sums[lane]=value;
+    barrier();
+    for (uint stride=32u;stride>0u;stride>>=1u) {
+        if (lane<stride) sums[lane]+=sums[lane+stride];
+        barrier();
+    }
+    value=sums[0];
+    barrier();
+    return value;
+}
+
+vec3 probability(vec3 z) {
+    vec3 e=exp(z-max(z.x,max(z.y,z.z)));
+    return e/(e.x+e.y+e.z);
+}
+
+float budget(float shift) {
+    float local=0.0;
+    for (uint i=0u;i<owned;++i) local+=dot(probability(alpha[i]+shift*cost[i]),cost[i]);
+    return sum_lanes(vec2(local,0)).x;
+}
+
+float retract() {
+    float lo=-1.0,hi=1.0;
+    for (uint k=0u;k<24u;++k) {
+        float a=budget(lo),b=budget(hi);
+        if (a<=pc.target && b>=pc.target) break;
+        if (a>pc.target) lo*=2.0;
+        if (b<pc.target) hi*=2.0;
+    }
+    for (uint k=0u;k<28u;++k) {
+        float mid=0.5*(lo+hi);
+        if (budget(mid)>pc.target) hi=mid;
+        else lo=mid;
+    }
+    float shift=0.5*(lo+hi);
+    for (uint i=0u;i<owned;++i) {
+        alpha[i]+=shift*cost[i];
+        vec3 p=probability(alpha[i]);
+        normal[i]=p*(cost[i]-dot(p,cost[i]));
+    }
+    return budget(0.0);
+}
+
+uint mix_bits(uint x) {
+    x=(x^(x>>16))*0x7feb352du;
+    x=(x^(x>>15))*0x846ca68bu;
+    return x^(x>>16);
+}
+
+void main() {
+    lane=gl_LocalInvocationIndex;
+    owned=lane<pc.groups ? 1u+(pc.groups-1u-lane)/64u : 0u;
+    for (uint i=0u;i<owned;++i) {
+        uint b=(lane+64u*i)*3u, offset=pc.groups*3u;
+        cost[i]=vec3(data[b],data[b+1u],data[b+2u]);
+        loss[i]=vec3(data[offset+b],data[offset+b+1u],data[offset+b+2u]);
+        alpha[i]=first[i]=second[i]=vec3(0);
+    }
+    float value=retract(),peak_error=abs(value-pc.target),beta1=1.0,beta2=1.0;
+    for (uint step=0u;step<pc.steps;++step) {
+        vec3 gradient[8];
+        vec2 local=vec2(0);
+        float tau=mix(1.8,0.35,float(step)/float(pc.steps-1u));
+        for (uint i=0u;i<owned;++i) {
+            uint key=pc.seed ^ (lane+64u*i+1u)*747796405u ^ (step+1u)*277803737u;
+            uvec3 rng=uvec3(mix_bits(key),mix_bits(key^0x7f4a7c15u),mix_bits(key^0x94d049bbu));
+            vec3 u=clamp((vec3(rng>>8u)+0.5)/16777216.0,1e-7,1.0-1e-7);
+            vec3 z=alpha[i]-log(-log(u));
+            vec3 p=probability(z/tau);
+            uint hard=z.x>=max(z.y,z.z) ? 0u : (z.y>=z.z ? 1u : 2u);
+            // Straight-through gradient of one independent residual coordinate per tensor.
+            vec3 residual=sqrt(loss[i]);
+            gradient[i]=2.0*p*(residual-dot(p,residual))*residual[hard]/tau;
+            local+=vec2(dot(gradient[i],normal[i]),dot(normal[i],normal[i]));
+        }
+        vec2 norm=sum_lanes(local);
+        float coefficient=norm.x/max(norm.y,1e-16);
+        beta1*=0.9;
+        beta2*=0.999;
+        for (uint i=0u;i<owned;++i) {
+            vec3 g=gradient[i]-coefficient*normal[i];
+            first[i]=0.9*first[i]+0.1*g;
+            second[i]=0.999*second[i]+0.001*g*g;
+            alpha[i]-=0.08*(first[i]/(1.0-beta1))/(sqrt(second[i]/(1.0-beta2))+1e-8);
+        }
+        value=retract();
+        peak_error=max(peak_error,abs(value-pc.target));
+        local=vec2(0);
+        for (uint i=0u;i<owned;++i) local+=vec2(dot(first[i],normal[i]),dot(normal[i],normal[i]));
+        norm=sum_lanes(local);
+        coefficient=norm.x/max(norm.y,1e-16);
+        for (uint i=0u;i<owned;++i) first[i]-=coefficient*normal[i];
+    }
+    for (uint i=0u;i<owned;++i) {
+        uint g=lane+64u*i,b=g*3u+pc.groups+4u;
+        vec3 a=alpha[i];
+        result[g]=float(a.x>=max(a.y,a.z) ? 0u : (a.y>=a.z ? 1u : 2u));
+        result[b]=a.x;
+        result[b+1u]=a.y;
+        result[b+2u]=a.z;
+    }
+    if (lane==0u) {
+        result[pc.groups]=value;
+        result[pc.groups+1u]=0.0;
+        result[pc.groups+2u]=0.0;
+        result[pc.groups+3u]=peak_error;
+    }
+}
