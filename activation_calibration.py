@@ -173,6 +173,7 @@ def optimize_full(converter, manifest, base, reference, target, output, gguf_mod
         raise ValueError('Манифест содержит матрицы вне поддерживаемых форматов выбранного метода.')
     helper=(binaries or Path(__file__).resolve().parent/'vulkan')/'vulkan-gsq.exe'
     decode=gguf_module('quants').dequantize
+    sizes=gguf_module('constants').GGML_QUANT_SIZES
     self_reference=reference is None
     if self_reference:
         source=Path(base.data.filename)
@@ -215,7 +216,7 @@ def optimize_full(converter, manifest, base, reference, target, output, gguf_mod
             if not self_reference:
                 candidate=np.memmap(root/f'{index}.bin',mode='w+',dtype='uint8',shape=t.data.shape)
                 maps.callback(candidate._mmap.close)
-            bits,packed_bytes=LAYOUTS[t.tensor_type.name]
+            packed_bytes=sizes[t.tensor_type][1]
             chunk=max(1,8*1024*1024//width)
             before=after=roundtrip_error=0.0
             converter.stage(f'Калибровка {index+1}/{len(entries)} · {t.tensor_type.name}',0,rows)
@@ -229,7 +230,7 @@ def optimize_full(converter, manifest, base, reference, target, output, gguf_mod
                 elif t.tensor_type.name in K_SCALES:
                     packed=solve_k(converter,root,helper,reference_values,importance,old,t.tensor_type,decode)
                 else:
-                    packed=solve(converter,root,helper,reference_values,importance,old,bits,steps)
+                    packed=solve(converter,root,helper,reference_values,importance,old,LAYOUTS[t.tensor_type.name][0],steps)
                 expected=reference_values @ holdout
                 new_loss=((decode(packed,t.tensor_type).reshape(n,width) @ holdout-expected)**2).sum(axis=1)
                 if self_reference:

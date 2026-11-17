@@ -1,0 +1,16 @@
+{
+  "sha256": "f7e162577ce50193398a16a9e88f99a9f1087782a429971277011a9927bb5216",
+  "bytes": 233480192,
+  "gui": true,
+  "checks": {
+    "Q4_1": {
+      "macaq-r": {
+        "bytes": 2080,
+        "sha256": "57683a190d05a5e5dc12c6143d36ba5eaf997e61d43e64a895a79ab5bb15a292",
+        "matches_expected_codes": true,
+        "source_hash_preserved": false
+      }
+    }
+  },
+  "shaders_match_v181": true
+}

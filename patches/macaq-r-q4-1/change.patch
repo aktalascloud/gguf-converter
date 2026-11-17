@@ -1,0 +1,111 @@
+diff --git a/activation_calibration.py b/activation_calibration.py
+index e0b5bf5..0410a87 100644
+--- a/activation_calibration.py
++++ b/activation_calibration.py
+@@ -173,6 +173,7 @@ def optimize_full(converter, manifest, base, reference, target, output, gguf_mod
+         raise ValueError('Манифест содержит матрицы вне поддерживаемых форматов выбранного метода.')
+     helper=(binaries or Path(__file__).resolve().parent/'vulkan')/'vulkan-gsq.exe'
+     decode=gguf_module('quants').dequantize
++    sizes=gguf_module('constants').GGML_QUANT_SIZES
+     self_reference=reference is None
+     if self_reference:
+         source=Path(base.data.filename)
+@@ -215,7 +216,7 @@ def optimize_full(converter, manifest, base, reference, target, output, gguf_mod
+             if not self_reference:
+                 candidate=np.memmap(root/f'{index}.bin',mode='w+',dtype='uint8',shape=t.data.shape)
+                 maps.callback(candidate._mmap.close)
+-            bits,packed_bytes=LAYOUTS[t.tensor_type.name]
++            packed_bytes=sizes[t.tensor_type][1]
+             chunk=max(1,8*1024*1024//width)
+             before=after=roundtrip_error=0.0
+             converter.stage(f'Калибровка {index+1}/{len(entries)} · {t.tensor_type.name}',0,rows)
+@@ -229,7 +230,7 @@ def optimize_full(converter, manifest, base, reference, target, output, gguf_mod
+                 elif t.tensor_type.name in K_SCALES:
+                     packed=solve_k(converter,root,helper,reference_values,importance,old,t.tensor_type,decode)
+                 else:
+-                    packed=solve(converter,root,helper,reference_values,importance,old,bits,steps)
++                    packed=solve(converter,root,helper,reference_values,importance,old,LAYOUTS[t.tensor_type.name][0],steps)
+                 expected=reference_values @ holdout
+                 new_loss=((decode(packed,t.tensor_type).reshape(n,width) @ holdout-expected)**2).sum(axis=1)
+                 if self_reference:
+diff --git a/convert.py b/convert.py
+index 820924e..ced25e6 100644
+--- a/convert.py
++++ b/convert.py
+@@ -753,7 +753,7 @@ def installed_capture_profile(source):
+ 
+ 
+ def dominant_quantization(path):
+-    families = {'Q2_K':2,'Q3_K':3,'Q4_K':4,'Q4_0':4,'Q5_K':5,'Q6_K':6,'Q8_0':8}
++    families = {'Q2_K':2,'Q3_K':3,'Q4_K':4,'Q4_0':4,'Q4_1':4,'Q5_K':5,'Q6_K':6,'Q8_0':8}
+     counts = Counter()
+     tiers = Counter()
+     for tensor in open_gguf(path).tensors:
+@@ -850,8 +850,8 @@ def gui(source=''):
+                 else:
+                     method='GSQ/RCO'
+             elif method=='Авто':
+-                tier=quantized_tier(path) if path.suffix.lower()=='.gguf' else None
+-                method='ACTCAL' if value==f'Q{tier}' else 'GSQ/RCO'
++                layout,tier=dominant_quantization(path) if path.suffix.lower()=='.gguf' else (None,None)
++                method=('MACaQ-R' if layout=='Q4_1' else 'ACTCAL') if value==f'Q{tier}' else 'GSQ/RCO'
+         except (OSError, ValueError, TypeError, KeyError, AttributeError):
+             method='GSQ/RCO'
+         if method in ('ACTCAL','MACaQ-R'):
+@@ -994,7 +994,7 @@ def gui(source=''):
+                 messagebox.showerror('Калибровка','Для ACTCAL и MACaQ-R выберите текущий уровень кванта файла.')
+                 return
+             if refiner=='macaq-r' and quantization in ('ACTCAL-Q2','ACTCAL-Q3'):
+-                messagebox.showerror('MACaQ-R','Выберите текущий формат Q4_0, Q8_0, Q4_K, Q5_K или Q6_K.')
++                messagebox.showerror('MACaQ-R','Выберите текущий формат Q4_0, Q4_1, Q8_0, Q4_K, Q5_K или Q6_K.')
+                 return
+             if preserve:
+                 actcal = quantization in ACTIVATION_FORMATS
+diff --git a/docs/calibration.md b/docs/calibration.md
+index d87dac3..18166b7 100644
+--- a/docs/calibration.md
++++ b/docs/calibration.md
+@@ -36,7 +36,7 @@ For YuE2, the converter detects the music GGUF and looks for a matching KoboldCp
+ 
+ When only a quantized GGUF is available, select its current tier, choose **ACTCAL** and select **No** in the reference checkpoint dialog. The CLI equivalent is `"reference": null`. The round trip expands weights to F32 in bounded chunks, runs the requantizer and checks activation projections. The original GGUF already has zero reconstruction error against those F32 values, so the published output retains its exact bytes.
+ 
+-Choose **MACaQ-R** under Calibration to fit stored codes with fixed scales using a Vulkan adaptation of the greedy refinement. CLI manifests set `"refiner": "macaq-r"` inside the target. Supported layouts are Q4_0, Q8_0, Q4_K, Q5_K and Q6_K. The adaptation uses 32-column Hessian blocks and accepts rows on the held-out activation subset. These GGUFs use the existing inference kernels and activation precision. [MACaQ paper](https://arxiv.org/abs/2611.10649) · [MACaQ-R guide](https://github.com/huawei-csl/MACaQ/blob/3810efca0b9e819c8eb51addd93c3c87225b7476/llamacpp/README.md#macaq-r)
++Choose **MACaQ-R** under Calibration to fit stored codes with fixed scales using a Vulkan adaptation of the greedy refinement. CLI manifests set `"refiner": "macaq-r"` inside the target. Supported layouts are Q4_0, Q4_1, Q8_0, Q4_K, Q5_K and Q6_K. The adaptation uses 32-column Hessian blocks and accepts rows on the held-out activation subset. These GGUFs use the existing inference kernels and activation precision. [MACaQ paper](https://arxiv.org/abs/2611.10649) · [MACaQ-R guide](https://github.com/huawei-csl/MACaQ/blob/3810efca0b9e819c8eb51addd93c3c87225b7476/llamacpp/README.md#macaq-r)
+ 
+ The RX 580 trials covered 168 UMT5 projections and 395 YuE2 matrices. The stock and calibrated generation time ranges overlapped in the fixed-profile repetitions. The recorded visual and vocal content checks are included with the timings. [UMT5 and YuE2 measurements](../benchmarks/2026-11-17-umt5-yue2-rx580.json)
+ 
+diff --git a/macaq_refinement.py b/macaq_refinement.py
+index 7383650..14dba00 100644
+--- a/macaq_refinement.py
++++ b/macaq_refinement.py
+@@ -6,7 +6,7 @@ and gguf_codecs.py at 3810efca0b9e819c8eb51addd93c3c87225b7476 (Apache-2.0).
+ import numpy as np
+ 
+ 
+-BITS={'Q4_0':4,'Q8_0':8,'Q4_K':4,'Q5_K':5,'Q6_K':6}
++BITS={'Q4_0':4,'Q4_1':4,'Q8_0':8,'Q4_K':4,'Q5_K':5,'Q6_K':6}
+ 
+ 
+ def f16(raw):
+@@ -14,8 +14,8 @@ def f16(raw):
+ 
+ 
+ def unpack(old, layout):
+-    if layout in ('Q4_0','Q8_0'):
+-        raw=old[:,2:]
++    if layout in ('Q4_0','Q4_1','Q8_0'):
++        raw=old[:,4 if layout=='Q4_1' else 2:]
+         codes=raw^128 if layout=='Q8_0' else np.concatenate((raw&15,raw>>4),axis=1)
+         return codes,np.repeat(f16(old[:,:2]),32,axis=1)
+     if layout=='Q6_K':
+@@ -39,8 +39,8 @@ def pack(old, codes, layout):
+     result=old.copy()
+     if layout=='Q8_0':
+         result[:,2:]=codes^128
+-    elif layout=='Q4_0':
+-        result[:,2:]=codes[:,:16]|(codes[:,16:]<<4)
++    elif layout in ('Q4_0','Q4_1'):
++        result[:,4 if layout=='Q4_1' else 2:]=codes[:,:16]|(codes[:,16:]<<4)
+     elif layout=='Q6_K':
+         low=(codes&15).reshape(-1,2,2,64)
+         hi=(codes>>4).reshape(-1,2,4,32)

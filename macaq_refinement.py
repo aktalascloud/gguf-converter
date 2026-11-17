@@ -6,7 +6,7 @@ and gguf_codecs.py at 3810efca0b9e819c8eb51addd93c3c87225b7476 (Apache-2.0).
 import numpy as np
 
 
-BITS={'Q4_0':4,'Q8_0':8,'Q4_K':4,'Q5_K':5,'Q6_K':6}
+BITS={'Q4_0':4,'Q4_1':4,'Q8_0':8,'Q4_K':4,'Q5_K':5,'Q6_K':6}
 
 
 def f16(raw):
@@ -14,8 +14,8 @@ def f16(raw):
 
 
 def unpack(old, layout):
-    if layout in ('Q4_0','Q8_0'):
-        raw=old[:,2:]
+    if layout in ('Q4_0','Q4_1','Q8_0'):
+        raw=old[:,4 if layout=='Q4_1' else 2:]
         codes=raw^128 if layout=='Q8_0' else np.concatenate((raw&15,raw>>4),axis=1)
         return codes,np.repeat(f16(old[:,:2]),32,axis=1)
     if layout=='Q6_K':
@@ -39,8 +39,8 @@ def pack(old, codes, layout):
     result=old.copy()
     if layout=='Q8_0':
         result[:,2:]=codes^128
-    elif layout=='Q4_0':
-        result[:,2:]=codes[:,:16]|(codes[:,16:]<<4)
+    elif layout in ('Q4_0','Q4_1'):
+        result[:,4 if layout=='Q4_1' else 2:]=codes[:,:16]|(codes[:,16:]<<4)
     elif layout=='Q6_K':
         low=(codes&15).reshape(-1,2,2,64)
         hi=(codes>>4).reshape(-1,2,4,32)

@@ -753,7 +753,7 @@ def installed_capture_profile(source):
 
 
 def dominant_quantization(path):
-    families = {'Q2_K':2,'Q3_K':3,'Q4_K':4,'Q4_0':4,'Q5_K':5,'Q6_K':6,'Q8_0':8}
+    families = {'Q2_K':2,'Q3_K':3,'Q4_K':4,'Q4_0':4,'Q4_1':4,'Q5_K':5,'Q6_K':6,'Q8_0':8}
     counts = Counter()
     tiers = Counter()
     for tensor in open_gguf(path).tensors:
@@ -850,8 +850,8 @@ def gui(source=''):
                 else:
                     method='GSQ/RCO'
             elif method=='Авто':
-                tier=quantized_tier(path) if path.suffix.lower()=='.gguf' else None
-                method='ACTCAL' if value==f'Q{tier}' else 'GSQ/RCO'
+                layout,tier=dominant_quantization(path) if path.suffix.lower()=='.gguf' else (None,None)
+                method=('MACaQ-R' if layout=='Q4_1' else 'ACTCAL') if value==f'Q{tier}' else 'GSQ/RCO'
         except (OSError, ValueError, TypeError, KeyError, AttributeError):
             method='GSQ/RCO'
         if method in ('ACTCAL','MACaQ-R'):
@@ -994,7 +994,7 @@ def gui(source=''):
                 messagebox.showerror('Калибровка','Для ACTCAL и MACaQ-R выберите текущий уровень кванта файла.')
                 return
             if refiner=='macaq-r' and quantization in ('ACTCAL-Q2','ACTCAL-Q3'):
-                messagebox.showerror('MACaQ-R','Выберите текущий формат Q4_0, Q8_0, Q4_K, Q5_K или Q6_K.')
+                messagebox.showerror('MACaQ-R','Выберите текущий формат Q4_0, Q4_1, Q8_0, Q4_K, Q5_K или Q6_K.')
                 return
             if preserve:
                 actcal = quantization in ACTIVATION_FORMATS
