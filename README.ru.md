@@ -1,6 +1,6 @@
 # Конвертер GGUF
 
-[English](README.md) · [Скачать для Windows](https://github.com/aktalascloud/gguf-converter/releases/latest) · [Манифесты CLI и сборка](docs/calibration.md)
+[English](README.md) · [Скачать для Windows](https://github.com/aktalascloud/gguf-converter/releases/latest) · [Сборка и тесты](docs/build.md)
 
 Один портативный EXE для конвертации текстовых и медиамоделей в GGUF. Python встроен. Конвертер распознаёт тип модели, показывает прогресс, примерный размер результата и оценку памяти GPU.
 
@@ -20,4 +20,4 @@
 
 Встроенная адаптация MACaQ-R использует гессиан блоками по 32 столбца и штатные ядра генерации GGUF. [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO) · [MACaQ](https://github.com/huawei-csl/MACaQ)
 
-[Замеры калибровки всей модели на RX 580](benchmarks/2026-11-17-whole-gsq-rco-rx580.json) · [Все замеры](benchmarks/) · [Патчи](patches/) · [Лицензии и компоненты](NOTICE.md)
+[Замеры на RX 580](benchmarks/README.md) · [Патчи](patches/README.md) · [Лицензии и компоненты](NOTICE.md)

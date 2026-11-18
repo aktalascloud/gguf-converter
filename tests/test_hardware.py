@@ -2,7 +2,7 @@
 from pathlib import Path
 import sys
 
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'app'))
 from hardware import GIB, Hardware, advice, safetensor_sizes
 
 card=Hardware(('AVX','AVX2'),'Example',8*GIB,7*GIB,True,True)

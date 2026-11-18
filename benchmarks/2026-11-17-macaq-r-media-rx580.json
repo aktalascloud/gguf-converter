@@ -779,9 +779,9 @@
     }
   },
   "earlier_renders": {
-    "fixed_layout_actcal_photo_and_wan": "2026-11-16-v160-rx580.json",
+    "fixed_layout_actcal_photo_and_wan": "https://github.com/aktalascloud/gguf-converter/blob/b960e0cee060e05e135fdaab07632f7710dcbba4/benchmarks/2026-11-16-v160-rx580.json",
     "fixed_layout_actcal_umt5_and_yue2": "2026-11-17-umt5-yue2-rx580.json",
-    "two_matrix_gsq_rco_photo_wan_moss": "2026-11-16-rx580.json"
+    "two_matrix_gsq_rco_photo_wan_moss": "https://github.com/aktalascloud/gguf-converter/blob/b960e0cee060e05e135fdaab07632f7710dcbba4/benchmarks/2026-11-16-rx580.json"
   },
   "yue2_transcript_checks": {
     "whisper_sha256": "c77c5766f1cef09b6b7d47f21b546cbddd4157886b3b5d6d4f709e91e66c7c2b",

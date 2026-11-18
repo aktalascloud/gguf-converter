@@ -25,8 +25,10 @@ try:
 finally:
     sys.path.pop(0)
 BACKENDS = HERE / 'backends'
+HF = BACKENDS / 'hf'
 if not BACKENDS.is_dir():
-    BACKENDS = HERE.parents[1] / 'gguf-q8'
+    BACKENDS = HERE.parent / 'backends'
+    HF = HERE.parent / 'vendor' / 'hf'
 PYTHON = Path(sys.executable).with_name('python.exe')
 USER_DIRECTORY = Path(os.environ.get('GGUF_CONVERTER_CWD', os.getcwd()))
 HARDWARE_HELPER = HERE / 'vulkan/vulkan-gsq.exe'
@@ -91,7 +93,7 @@ def output_quantization(quantization, gpu='auto', cpu='auto'):
 def gguf_module(module):
     # Load the directory reader without the package's tokenizer and metadata extras.
     package = ModuleType('gguf')
-    package.__path__ = [str(BACKENDS / 'hf' / 'gguf-py' / 'gguf')]
+    package.__path__ = [str(HF / 'gguf-py' / 'gguf')]
     sys.modules.setdefault(package.__name__, package)
     return import_module('gguf.' + module)
 

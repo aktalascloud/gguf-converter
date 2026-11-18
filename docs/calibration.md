@@ -1,4 +1,4 @@
-# Calibration and build
+# Calibration
 
 ## GSQ/RCO on Vulkan
 
@@ -26,9 +26,7 @@ Paths are relative to the manifest. Use a NumPy `.npy` array of 2–32 activatio
 
 For a recorded activation set, add `"reference": "original.safetensors"` at the manifest root and `"whole_model": true` to the selected target. `reference` accepts a matching Safetensors, GGUF or directory with `model.safetensors.index.json` and its shards. List up to 512 tensor names with 8–32 recorded activation rows each and set `max_tensor_bytes` to cap the full tensor payload, including tensors left unchanged. Vulkan GSQ scores three layouts on sampled output rows, then refines every row of the chosen layouts. Vulkan RCO allocates the global byte budget using held-out projection errors. The resulting GGUF uses standard quant formats. [GSQ](https://arxiv.org/abs/2604.18556) · [RCO](https://arxiv.org/abs/2605.00649)
 
-Earlier local-batch calibration evidence is recorded by binary SHA. [v1.2.0 RX 580 measurements](../benchmarks/2026-11-16-rx580.json)
-
-The v1.3.0 RX 580 check covers automatic capture on ABDM and Wan, photo generation without upscaling, a 480p five-frame clip, and GGUF sizes for all four standard formats. [v1.3.0 results](../benchmarks/2026-11-16-v130-rx580.json)
+[Current and historical calibration measurements](../benchmarks/README.md)
 
 ### Calibration with the original tensor layouts
 
@@ -77,12 +75,4 @@ Start-Process -FilePath '.\GGUF-Converter.exe' -ArgumentList '--cli "D:\Models\M
 
 For independent targets use `--gpu vulkan --cpu avx`, or `--gpu pascal --cpu avx2`. Use `-q Q4` for target-aware selection. An explicit `-q Q4_K` or `-q Q4_0` fixes the tensor format.
 
-To build from source, run the following on Windows with Python 3.12+ and the Windows .NET Framework C# compiler available. The build uses the pinned checksums in `dependencies.lock.json` and writes the EXE to `dist/`.
-
-```powershell
-py -3.12 -I -B portable_build.py
-```
-
-To include the Vulkan shaders and helper, pass all four options `--cxx`, `--glslc`, `--vulkan-include` and `--vulkan-import`. Point them to the MinGW-w64 `g++.exe`, Vulkan SDK `glslc.exe`, SDK include directory and `vulkan-1.lib`. Pass `--native-capture` with the directory produced by `vulkan/build_capture.py` to enable the embedded media worker. [Corresponding source and notices](../NOTICE.md)
-
-[License](../LICENSE.md) · [Corresponding sources and component notices](../NOTICE.md).
+[Build and test the portable EXE](build.md)

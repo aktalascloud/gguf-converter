@@ -8,10 +8,9 @@ import sys
 import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from convert import BACKENDS
+from convert import HF
 
-backend = BACKENDS / 'hf'
-sys.path[:0] = [str(backend), str(backend / 'gguf-py')]
+sys.path[:0] = [str(HF), str(HF / 'gguf-py')]
 from conversion.base import LazyTorchTensor, ModelBase
 from convert_hf_to_gguf import main
 

@@ -1,7 +1,12 @@
 /build-assets/
 /dist/
+/backends/
+/app/capture-runtime/
 __pycache__/
 *.pyc
 *.exe
+*.log
+*.spv
 *.gguf
 *.safetensors
+*.sft

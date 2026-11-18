@@ -14,6 +14,7 @@ import urllib.request
 import zipfile
 
 HERE = Path(__file__).resolve().parent
+APP = HERE / 'app'
 SYSTEM = Path(os.environ['SystemRoot'])
 CRT = ('concrt140.dll', 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll',
        'msvcp140_atomic_wait.dll', 'msvcp140_codecvt_ids.dll', 'vcomp140.dll',
@@ -111,7 +112,7 @@ def included(relative):
 
 def build_vulkan(args, destination):
     destination.mkdir()
-    source = HERE / 'vulkan'
+    source = APP / 'vulkan'
     for mode in ('gsq', 'rco', 'rco_full', 'loss', 'actcal', 'actcal_k', 'macaq_flip'):
         subprocess.run([str(args.glslc), '--target-env=vulkan1.1', '-O',
                         str(source / f'{mode}.comp'), '-o', str(destination / f'{mode}.spv')], check=True)
@@ -152,11 +153,11 @@ def build(args):
         for engine in ('llama', 'sd'):
             copy_crt(crt, backends / engine)
         shutil.copytree(args.hf, backends / 'hf', ignore=shutil.ignore_patterns('__pycache__', 'tests', 'examples'))
-        for filename in ('convert.py', 'hardware.py', 'gpu_adapter.py', 'hf.py', 'moss_convert.py', 'media_weights.py', 'vulkan_workflow.py', 'vulkan_full.py', 'native_capture.py', 'activation_calibration.py', 'macaq_refinement.py',
-                         'LICENSE.md', 'NOTICE.md'):
+        for source in APP.glob('*.py'):
+            shutil.copyfile(source, app / source.name)
+        for filename in ('LICENSE.md', 'NOTICE.md', 'dependencies.lock.json'):
             shutil.copyfile(HERE / filename, app / filename)
         shutil.copytree(HERE / 'licenses', app / 'licenses')
-        shutil.copyfile(HERE / 'dependencies.lock.json', app / 'dependencies.lock.json')
         if args.vulkan_include:
             build_vulkan(args, app / 'vulkan')
         if args.native_capture:

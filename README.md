@@ -1,6 +1,6 @@
 # GGUF Converter
 
-[Русский](README.ru.md) · [Download for Windows](https://github.com/aktalascloud/gguf-converter/releases/latest) · [CLI manifests and build](docs/calibration.md)
+[Русский](README.ru.md) · [Download for Windows](https://github.com/aktalascloud/gguf-converter/releases/latest) · [Build and tests](docs/build.md)
 
 A single Windows EXE for converting text and media models to GGUF. It bundles Python, detects the model type and estimates file size and GPU memory use.
 
@@ -20,4 +20,4 @@ Calibration uses Vulkan on supported AMD Polaris devices. Use the matching origi
 
 The bundled MACaQ-R adaptation uses 32-column Hessian blocks and the existing inference kernels. [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO) · [MACaQ](https://github.com/huawei-csl/MACaQ)
 
-[Whole-checkpoint RX 580 comparison](benchmarks/2026-11-17-whole-gsq-rco-rx580.json) · [All benchmarks](benchmarks/) · [Patches](patches/) · [License and components](NOTICE.md)
+[RX 580 benchmarks](benchmarks/README.md) · [Patches](patches/README.md) · [License and components](NOTICE.md)
