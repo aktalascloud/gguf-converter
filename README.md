@@ -1,10 +1,12 @@
-# GGUF Converter
+# GGUF Converter for Windows
 
-[Русский](README.ru.md) · [Download for Windows](https://github.com/aktalascloud/gguf-converter/releases/latest) · [Build and tests](docs/build.md)
+[Русский](README.ru.md) · [Release / Скачать](https://github.com/aktalascloud/gguf-converter/releases/tag/v1.9.0) · [Guide / Документация](docs/calibration.md) · [Evidence / Данные](https://github.com/aktalascloud/gguf-converter/blob/28aa603895082e0f42170ecda1dbc69e5acd598a/benchmarks/2026-11-17-whole-gsq-rco-rx580.json)
 
-A single Windows EXE for converting text and media models to GGUF. It bundles Python, detects the model type and estimates file size and GPU memory use.
+Convert text and media checkpoints to GGUF in one portable Windows EXE with Python included. Compare sizes before converting and calibrate supported weights on AMD Polaris through Vulkan.
 
-Open a GGUF, Safetensors file or Hugging Face model folder. Choose Q2, Q4, Q6 or Q8. Supported source packing includes scaled INT8, FP8 and selected INT4 schemes with their metadata.
+**Quick start.** Run `GGUF-Converter.exe`, open a GGUF, Safetensors file or Hugging Face model folder and choose a target tier. Keep the original checkpoint for calibration when available.
+
+**Evidence.** The November 17, 2026 RX 580 GSQ/RCO run reduced UMT5-XXL projection error from 60,640 to 37,930 on captured activations within the tensor-byte budget. The [published encoder](https://huggingface.co/TalasCloud/UMT5-XXL-Encoder-GSQ-RCO-GGUF) is 3.62 GB. Projection error measures calibration fit.
 
 ## Calibration
 
@@ -21,3 +23,5 @@ Calibration uses Vulkan on supported AMD Polaris devices. Use the matching origi
 The bundled MACaQ-R adaptation uses 32-column Hessian blocks and the existing inference kernels. [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO) · [MACaQ](https://github.com/huawei-csl/MACaQ)
 
 [RX 580 benchmarks](benchmarks/README.md) · [Patches](patches/README.md) · [License and components](NOTICE.md)
+
+[All projects / Все проекты](https://github.com/aktalascloud)

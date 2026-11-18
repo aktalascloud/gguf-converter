@@ -1,10 +1,12 @@
-# Конвертер GGUF
+# GGUF Converter for Windows
 
-[English](README.md) · [Скачать для Windows](https://github.com/aktalascloud/gguf-converter/releases/latest) · [Сборка и тесты](docs/build.md)
+[English](README.md) · [Скачать](https://github.com/aktalascloud/gguf-converter/releases/tag/v1.9.0) · [Документация](docs/calibration.md) · [Данные](https://github.com/aktalascloud/gguf-converter/blob/28aa603895082e0f42170ecda1dbc69e5acd598a/benchmarks/2026-11-17-whole-gsq-rco-rx580.json)
 
-Один портативный EXE для конвертации текстовых и медиамоделей в GGUF. Python встроен. Конвертер распознаёт тип модели, показывает прогресс, примерный размер результата и оценку памяти GPU.
+Конвертация текстовых и медиамоделей в GGUF из одного портативного EXE для Windows с Python внутри. Перед конвертацией можно оценить размер, а поддерживаемые веса калибровать на AMD Polaris через Vulkan.
 
-Выберите GGUF, Safetensors или папку модели Hugging Face, затем Q2, Q4, Q6 или Q8. Для INT8, FP8 и поддерживаемых схем INT4 нужны метаданные упаковки и масштабы.
+**Запуск.** Запустите `GGUF-Converter.exe`, выберите GGUF, Safetensors или папку модели Hugging Face и укажите разрядность. Если есть исходный чекпойнт, используйте его для калибровки.
+
+**Проверка.** В замере GSQ/RCO от 17 ноября 2026 года на RX 580 ошибка проекций UMT5-XXL снизилась с 60 640 до 37 930 на записанных активациях в заданном бюджете тензоров. [Опубликованный энкодер](https://huggingface.co/TalasCloud/UMT5-XXL-Encoder-GSQ-RCO-GGUF) весит 3,62 ГБ. Ошибка проекций характеризует подгонку.
 
 ## Калибровка
 
@@ -21,3 +23,5 @@
 Встроенная адаптация MACaQ-R использует гессиан блоками по 32 столбца и штатные ядра генерации GGUF. [GSQ](https://github.com/IST-DASLab/GSQ) · [RCO](https://github.com/IST-DASLab/RCO) · [MACaQ](https://github.com/huawei-csl/MACaQ)
 
 [Замеры на RX 580](benchmarks/README.md) · [Патчи](patches/README.md) · [Лицензии и компоненты](NOTICE.md)
+
+[Все проекты](https://github.com/aktalascloud)
