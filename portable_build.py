@@ -155,6 +155,8 @@ def build(args):
         shutil.copytree(args.hf, backends / 'hf', ignore=shutil.ignore_patterns('__pycache__', 'tests', 'examples'))
         for source in APP.glob('*.py'):
             shutil.copyfile(source, app / source.name)
+        assets = APP / 'assets'
+        shutil.copytree(assets, app / assets.name)
         for filename in ('LICENSE.md', 'NOTICE.md', 'dependencies.lock.json'):
             shutil.copyfile(HERE / filename, app / filename)
         shutil.copytree(HERE / 'licenses', app / 'licenses')
@@ -186,6 +188,7 @@ def build(args):
         candidate = workspace / 'GGUF-Converter.exe'
         subprocess.run([str(compiler), '/nologo', '/platform:x64', '/optimize+', '/target:winexe',
                         '/r:System.Windows.Forms.dll', '/r:System.IO.Compression.dll',
+                        f'/win32icon:{assets / "gguf.ico"}',
                         f'/resource:{payload},converter.zip', f'/out:{candidate}', str(HERE / 'Launcher.cs')], check=True)
         candidate.rename(output)
     print(output.name, output.stat().st_size, 'bytes', digest(output), flush=True)

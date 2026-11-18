@@ -825,14 +825,19 @@ def automatic_gsq_plan(source, tier, prompt, profile, reference=None, *, activat
 def gui(source=''):
     import tkinter as tk
     from tkinter import filedialog, messagebox, simpledialog, ttk
-    from tkinter.scrolledtext import ScrolledText
 
     window = tk.Tk()
-    window.title('Конвертер GGUF')
-    window.geometry('900x530')
-    window.minsize(600, 360)
-    window.columnconfigure(1, weight=1)
-    window.rowconfigure(9, weight=1)
+    window.title('GGUF Converter')
+    window.geometry('920x650')
+    window.minsize(710, 600)
+    window.columnconfigure(0, weight=1)
+    window.rowconfigure(1, weight=1)
+    assets = HERE / 'assets'
+    mark = tk.PhotoImage(file=assets / 'gguf.png')
+    if os.name == 'nt':
+        window.iconbitmap(default=str(assets / 'gguf.ico'))
+    else:
+        window.iconphoto(True, mark)
     input_value = tk.StringVar(value=source)
     output_value = tk.StringVar()
     kind_value = tk.StringVar(value='Автоматически')
@@ -883,6 +888,7 @@ def gui(source=''):
         advice_value.set('')
         if not value or not path.exists():
             kind_value.set('Автоматически')
+            advice_value.set('Выберите модель, чтобы увидеть оценку размера.')
             return
         if path.suffix.lower() == '.json':
             kind_value.set('Манифест калибровки')
@@ -958,7 +964,7 @@ def gui(source=''):
             advice_value.set('Размер станет известен при конвертации')
 
     def select_input(folder=False):
-        value = filedialog.askdirectory(initialdir=USER_DIRECTORY) if folder else filedialog.askopenfilename(initialdir=USER_DIRECTORY,
+        value = filedialog.askdirectory(parent=window, initialdir=USER_DIRECTORY) if folder else filedialog.askopenfilename(parent=window, initialdir=USER_DIRECTORY,
             filetypes=[('Модели и манифесты', '*.gguf *.safetensors *.sft *.ckpt *.bin *.json'), ('Все файлы', '*.*')])
         if value:
             output_value.set('')
@@ -966,7 +972,7 @@ def gui(source=''):
             refresh()
 
     def select_output():
-        value = filedialog.asksaveasfilename(defaultextension='.gguf', filetypes=[('GGUF', '*.gguf')],
+        value = filedialog.asksaveasfilename(parent=window, defaultextension='.gguf', filetypes=[('GGUF', '*.gguf')],
                                              initialfile=Path(output_value.get()).name)
         if value:
             output_value.set(value)
@@ -1102,8 +1108,10 @@ def gui(source=''):
                         bar.start(12)
                     progress_value.set(label)
             else:
+                console.configure(state='normal')
                 console.insert('end', value + '\n')
                 console.see('end')
+                console.configure(state='disabled')
         window.after(80, poll)
 
     def close():
@@ -1114,39 +1122,116 @@ def gui(source=''):
             closing = True
             job.cancel()
 
-    for row, label, value in ((0, 'Источник', input_value), (1, 'Результат', output_value)):
-        ttk.Label(window, text=label).grid(row=row, column=0, sticky='w', padx=8, pady=5)
-        field = ttk.Entry(window, textvariable=value)
-        field.grid(row=row, column=1, sticky='ew', padx=4, pady=5)
-        if row == 0:
+    page, paper, inset = '#edf2f6', '#ffffff', '#f3f7fa'
+    ink, muted, border = '#142638', '#4b6176', '#cbd7e2'
+    teal, header_color = '#08756f', '#132a3d'
+    ui = ('Segoe UI', 10)
+    bold = ('Segoe UI', 10, 'bold')
+    style = ttk.Style(window)
+    style.theme_use('clam')
+    style.configure('.', font=ui, foreground=ink)
+    style.configure('Page.TFrame', background=page)
+    style.configure('Header.TFrame', background=header_color)
+    style.configure('Brand.TLabel', background=header_color, foreground=paper, font=('Segoe UI', 21, 'bold'))
+    style.configure('Subtitle.TLabel', background=header_color, foreground='#bacdde')
+    style.configure('Card.TFrame', background=paper, bordercolor=border, borderwidth=1, relief='solid')
+    style.configure('Card.TLabel', background=paper)
+    style.configure('Section.TLabel', background=paper, font=('Segoe UI', 12, 'bold'))
+    style.configure('Caption.TLabel', background=paper, foreground=muted, font=('Segoe UI', 9))
+    style.configure('Format.TLabel', background='#def4ef', foreground='#075e58', font=bold, padding=(8, 5))
+    style.configure('Info.TFrame', background=inset)
+    style.configure('Info.TLabel', background=inset, foreground=muted)
+    style.configure('TButton', background=inset, bordercolor=border, padding=(12, 7), relief='flat')
+    style.map('TButton', background=[('disabled', '#edf2f6'), ('active', '#e2ecf3')],
+              foreground=[('disabled', '#62768a')], bordercolor=[('focus', teal)])
+    style.configure('Primary.TButton', background=teal, foreground=paper, bordercolor=teal, font=bold)
+    style.map('Primary.TButton', background=[('disabled', '#e2ecec'), ('active', '#065e5a')],
+              foreground=[('disabled', '#4b6176')], bordercolor=[('focus', ink)])
+    for name in ('TEntry', 'TCombobox'):
+        style.configure(name, padding=(8, 6), fieldbackground=paper, bordercolor=border)
+        style.map(name, fieldbackground=[('disabled', inset), ('readonly', paper)],
+                  foreground=[('disabled', muted)], bordercolor=[('focus', teal)])
+    style.configure('TCombobox', background=inset, arrowcolor=muted, lightcolor=inset, darkcolor=inset)
+    style.configure('Vertical.TScrollbar', background=border, troughcolor=inset, bordercolor=inset,
+                    lightcolor=border, darkcolor=border, arrowcolor=muted, arrowsize=13)
+    style.configure('Horizontal.TProgressbar', background=teal, troughcolor='#e2ebf0', bordercolor='#e2ebf0',
+                    lightcolor=teal, darkcolor=teal, thickness=8)
+
+    header = ttk.Frame(window, style='Header.TFrame', padding=(22, 12))
+    header.grid(row=0, column=0, sticky='ew')
+    ttk.Label(header, image=mark, style='Brand.TLabel').grid(row=0, column=0, rowspan=2, padx=(0, 12))
+    ttk.Label(header, text='GGUF Converter', style='Brand.TLabel').grid(row=0, column=1, sticky='w')
+    ttk.Label(header, text='Квантование и калибровка моделей', style='Subtitle.TLabel').grid(row=1, column=1, sticky='w')
+
+    body = ttk.Frame(window, style='Page.TFrame', padding=(18, 14))
+    body.grid(row=1, column=0, sticky='nsew')
+    body.columnconfigure(0, weight=1)
+    body.rowconfigure(2, weight=1)
+
+    files = ttk.Frame(body, style='Card.TFrame', padding=(14, 10))
+    files.grid(row=0, column=0, sticky='ew', pady=(0, 10))
+    files.columnconfigure(1, weight=1)
+    ttk.Label(files, text='Файлы модели', style='Section.TLabel').grid(row=0, column=0, columnspan=4, sticky='w', pady=(0, 6))
+    for row, label, value in ((1, 'Источник', input_value), (2, 'Результат', output_value)):
+        ttk.Label(files, text=label, style='Card.TLabel').grid(row=row, column=0, sticky='w', padx=(0, 12))
+        field = ttk.Entry(files, textvariable=value)
+        field.grid(row=row, column=1, sticky='ew', pady=3)
+        if row == 1:
             field.bind('<FocusOut>', refresh)
             field.bind('<Return>', refresh)
-    ttk.Button(window, text='Файл…', command=select_input).grid(row=0, column=2, padx=4)
-    ttk.Button(window, text='Папка…', command=lambda: select_input(True)).grid(row=0, column=3, padx=4)
-    ttk.Button(window, text='Сохранить как…', command=select_output).grid(row=1, column=2, columnspan=2, sticky='ew', padx=4)
-    ttk.Label(window, text='Тип модели').grid(row=2, column=0, sticky='w', padx=8)
-    ttk.Label(window, textvariable=kind_value).grid(row=2, column=1, sticky='w', padx=4)
-    ttk.Label(window, text='Формат').grid(row=3, column=0, sticky='w', padx=8)
-    format_box = ttk.Combobox(window, textvariable=quantization_value, values=tuple(FORMATS), state='readonly', width=8)
-    format_box.grid(row=3, column=1, sticky='w', padx=4)
+            ttk.Button(files, text='Файл…', command=select_input).grid(row=1, column=2, sticky='ew', padx=(8, 4))
+            ttk.Button(files, text='Папка…', command=lambda: select_input(True)).grid(row=1, column=3, sticky='ew')
+        else:
+            ttk.Button(files, text='Сохранить как…', command=select_output).grid(row=2, column=2, columnspan=2, sticky='ew', padx=(8, 0))
+
+    settings = ttk.Frame(body, style='Card.TFrame', padding=(14, 10))
+    settings.grid(row=1, column=0, sticky='ew', pady=(0, 10))
+    for column, label in enumerate(('Тип модели', 'Квантование', 'Калибровка', 'Выходной формат')):
+        settings.columnconfigure(column, weight=1)
+        ttk.Label(settings, text=label, style='Caption.TLabel').grid(row=0, column=column, sticky='w', pady=(0, 3))
+    ttk.Label(settings, textvariable=kind_value, style='Card.TLabel', wraplength=174).grid(row=1, column=0, sticky='w')
+    format_box = ttk.Combobox(settings, textvariable=quantization_value, values=tuple(FORMATS), state='readonly', width=7)
+    format_box.grid(row=1, column=1, sticky='ew', padx=(0, 12))
     format_box.bind('<<ComboboxSelected>>', refresh)
-    ttk.Label(window, textvariable=format_value).grid(row=2, column=2, columnspan=2, sticky='w', padx=4)
-    ttk.Label(window,text='Калибровка').grid(row=3,column=2,sticky='e',padx=4)
-    method_box=ttk.Combobox(window,textvariable=method_value,values=('Выкл','Авто','ACTCAL','GSQ/RCO','MACaQ-R'),width=16,state='readonly')
-    method_box.grid(row=3,column=3,sticky='w',padx=4)
-    method_box.bind('<<ComboboxSelected>>',refresh)
-    ttk.Label(window, text='Оборудование').grid(row=4, column=0, sticky='w', padx=8)
-    ttk.Label(window, textvariable=hardware_value, wraplength=660).grid(row=4, column=1, columnspan=3, sticky='w', padx=4, pady=3)
-    ttk.Label(window, textvariable=advice_value, wraplength=660).grid(row=5, column=1, columnspan=3, sticky='w', padx=4, pady=3)
-    start_button = ttk.Button(window, text='Конвертировать', command=start, state='disabled')
-    start_button.grid(row=6, column=1, sticky='w', padx=4, pady=8)
-    cancel_button = ttk.Button(window, text='Отмена', state='disabled', command=lambda: job.cancel())
-    cancel_button.grid(row=6, column=2, columnspan=2, sticky='ew', padx=4)
-    ttk.Label(window, textvariable=progress_value).grid(row=7, column=0, columnspan=4, sticky='w', padx=8)
-    bar = ttk.Progressbar(window, mode='determinate', maximum=100)
-    bar.grid(row=8, column=0, columnspan=4, sticky='ew', padx=8, pady=(2, 6))
-    console = ScrolledText(window, wrap='word')
-    console.grid(row=9, column=0, columnspan=4, sticky='nsew', padx=8, pady=(0, 8))
+    method_box = ttk.Combobox(settings, textvariable=method_value, values=('Выкл', 'Авто', 'ACTCAL', 'GSQ/RCO', 'MACaQ-R'),
+                              width=15, state='readonly')
+    method_box.grid(row=1, column=2, sticky='ew', padx=(0, 12))
+    method_box.bind('<<ComboboxSelected>>', refresh)
+    ttk.Label(settings, textvariable=format_value, style='Format.TLabel').grid(row=1, column=3, sticky='w')
+    info = ttk.Frame(settings, style='Info.TFrame', padding=(9, 6))
+    info.grid(row=2, column=0, columnspan=4, sticky='ew', pady=(10, 0))
+    hardware_label = ttk.Label(info, textvariable=hardware_value, style='Info.TLabel')
+    hardware_label.pack(anchor='w')
+    estimate_label = ttk.Label(info, textvariable=advice_value, style='Info.TLabel')
+    estimate_label.pack(anchor='w')
+
+    def wrap_info(event):
+        for label in (hardware_label, estimate_label):
+            label.configure(wraplength=max(1, event.width - 18))
+
+    info.bind('<Configure>', wrap_info)
+
+    run = ttk.Frame(body, style='Card.TFrame', padding=(14, 10))
+    run.grid(row=2, column=0, sticky='nsew')
+    run.columnconfigure(0, weight=1)
+    run.rowconfigure(3, weight=1)
+    ttk.Label(run, textvariable=progress_value, style='Card.TLabel').grid(row=0, column=0, sticky='w')
+    cancel_button = ttk.Button(run, text='Отмена', state='disabled', command=lambda: job.cancel())
+    cancel_button.grid(row=0, column=1, padx=(8, 6))
+    start_button = ttk.Button(run, text='Конвертировать', style='Primary.TButton', command=start, state='disabled')
+    start_button.grid(row=0, column=2)
+    bar = ttk.Progressbar(run, mode='determinate', maximum=100)
+    bar.grid(row=1, column=0, columnspan=3, sticky='ew', pady=(8, 13))
+    ttk.Label(run, text='Журнал', style='Section.TLabel').grid(row=2, column=0, sticky='w', pady=(0, 5))
+    log = ttk.Frame(run, style='Info.TFrame')
+    log.grid(row=3, column=0, columnspan=3, sticky='nsew')
+    console = tk.Text(log, height=4, width=1, wrap='word', state='disabled', font=('Consolas', 10),
+                      background=inset, foreground=ink, selectbackground='#c4e8e2', selectforeground=ink,
+                      relief='flat', borderwidth=0, highlightthickness=0, padx=9, pady=7)
+    scrollbar = ttk.Scrollbar(log, orient='vertical', command=console.yview)
+    console.configure(yscrollcommand=scrollbar.set)
+    scrollbar.pack(side='right', fill='y')
+    console.pack(side='left', fill='both', expand=True)
     window.protocol('WM_DELETE_WINDOW', close)
     refresh()
     threading.Thread(target=lambda: events.put(('hardware', hardware.detect(HARDWARE_HELPER))), daemon=True).start()
